@@ -1,0 +1,44 @@
+html, body {
+    height: 100%;
+    margin: 0;
+    padding: 0;
+}
+
+#dash-app{
+    min-height: 80vh;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+}
+
+#dash-app > div:nth-child(1){
+    min-height: 80vh;
+    width: 100%;
+    margin: 0;
+    padding: 0;
+}
+
+#dash-app iframe {
+    height: 100%;
+    width: 100%;
+    border: none;
+}
+
+a.btn {
+    display: inline-block; /* Permite adicionar padding e margin como um botão */
+    background-color: #007bff; /* Cor de fundo do botão */
+    color: white; /* Cor do texto */
+    text-align: center; /* Centraliza o texto */
+    padding: 10px 20px; /* Espaçamento interno do botão */
+    border-radius: 5px; /* Bordas arredondadas */
+    text-decoration: none; /* Remove o sublinhado */
+    transition: background-color 0.3s ease; /* Transição suave para a cor de fundo */
+}
+
+a.btn:hover {
+    background-color: #0056b3; /* Cor de fundo ao passar o mouse */
+}
+
+a.btn:active {
+    background-color: #004085; /* Cor de fundo ao clicar */
+}

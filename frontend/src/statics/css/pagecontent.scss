@@ -1,0 +1,12 @@
+.pagecontent {
+    flex-grow: 1 !important;
+    min-height: 100vh !important;
+    background-color: #f0f0f0 !important;
+    overflow: auto !important;
+    transition: all 0.25s ease-in-out !important;
+    margin-left: 70px;
+}
+
+.pagecontent.expanded {
+    margin-left: 260px !important;
+}

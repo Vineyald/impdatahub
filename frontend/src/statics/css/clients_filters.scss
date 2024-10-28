@@ -1,0 +1,15 @@
+.container > div:nth-child(2){
+    height: 100%;
+}
+
+.container > div:nth-child(2) > div:nth-child(1){
+    min-height: 150vh;
+}
+
+body{
+    background-color: #f8f9fa;
+}
+
+html{
+    background-color: #f8f9fa;
+}

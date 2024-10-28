@@ -1,0 +1,82 @@
+// Container dos filtros
+.filters {
+  border-radius: 20px;
+  box-shadow: 0px 0px 10px rgba(0, 0, 0, 0.1);
+  background-color: #f9f9f9;
+  overflow: hidden;
+  padding: 2rem;
+}
+
+// Cabeçalho da Tabela
+.table thead th {
+  background-color: #202020;
+  color: #f9f9f9;
+  font-weight: bold;
+  text-transform: uppercase;
+  padding: 12px;
+  border-bottom: 2px solid #ddd;
+  text-align: center;
+}
+
+// Tabela e Estrutura Flexível
+.custom-table {
+  width: 100%;
+  border-collapse: collapse;
+
+  th, td {
+    padding: 16px;
+    text-align: left;
+    overflow: hidden;
+    white-space: pre;
+    text-overflow: ellipsis;
+    border: 1px solid #dee2e6;
+  }
+
+  // Configurações de Largura e Flexibilidade das Colunas
+  thead tr, tbody tr {
+    display: flex;
+    width: 100%;
+  }
+
+  th:nth-child(1), td:nth-child(1) {
+    flex: 2 1 150px; // Nome do Cliente: maior largura
+    max-width: 300px;
+  }
+
+  th:nth-child(2), td:nth-child(2) {
+    flex: 1 1 100px; // Total Gasto: prioridade média
+  }
+
+  th:nth-child(3), td:nth-child(3),
+  th:nth-child(4), td:nth-child(4) {
+    flex: 1 1 80px; // Datas: largura menor
+  }
+}
+
+// Estilos para Linhas e Interatividade
+.table-striped tbody tr {
+  background-color: #fdfdfd;
+  transition: background-color 0.3s ease;
+}
+
+.table-striped tbody tr:nth-child(odd) {
+  background-color: #f7f7f7; // Linhas ímpares
+}
+
+.table-striped tbody tr:hover {
+  background-color: #e8e8e8; // Efeito ao passar o mouse
+  cursor: pointer; // Cursor interativo
+}
+
+// Ajuste para Cabeçalhos e Células de Dados
+.table-striped th {
+  text-align: center;
+}
+
+.table-striped td {
+  padding: 16px;
+}
+
+.table-striped{
+  height: 80%;
+}
