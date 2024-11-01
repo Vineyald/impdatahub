@@ -39,3 +39,19 @@ class ClienteSerializer(serializers.ModelSerializer):
     class Meta:
         model = Clientes
         fields = ['nome', 'id', 'origem', 'compras']
+
+from .models import User
+
+class UserSerializer(serializers.ModelSerializer):
+    class Meta:
+        model = User
+        fields = ['email', 'password', 'name', 'admin_password']  # Adicione os campos necessários
+
+    def create(self, validated_data):
+        user = User(
+            email=validated_data['email'],
+            name=validated_data['name'],
+        )
+        user.set_password(validated_data['password'])  # Certifique-se de usar set_password para criptografar
+        user.save()
+        return user

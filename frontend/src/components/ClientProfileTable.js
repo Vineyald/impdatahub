@@ -12,7 +12,7 @@ const ClientProfileTable = ({ purchases }) => {
   }, {});
 
   return (
-    <div className="container">
+    <div className="container-fluid p-0">
       {purchases.length > 0 ? (
         <table className="table table-striped">
           <thead>
@@ -22,7 +22,9 @@ const ClientProfileTable = ({ purchases }) => {
               <th>Produto</th>
               <th>Quantidade</th>
               <th>Preço Unitário</th>
+              <th>Valor com Desconto</th>
               <th>Preço Total</th>
+              <th>Frete</th>
               <th>Preço Final</th>
             </tr>
           </thead>
@@ -39,9 +41,13 @@ const ClientProfileTable = ({ purchases }) => {
                   <td>{item.produto}</td>
                   <td>{item.quantidade_produto}</td>
                   <td>R$ {item.preco_unitario}</td>
+                  <td>R$ {item.valor_desconto}</td>
                   <td>R$ {item.valor_total}</td>
                   {index === 0 && (
-                    <td rowSpan={items.length}>R$ {item.preco_final}</td>
+                    <>
+                      <td rowSpan={items.length}>R$ {item.valor_frete}</td>
+                      <td rowSpan={items.length}>R$ {item.preco_final}</td>
+                    </>
                   )}
                 </tr>
               ))

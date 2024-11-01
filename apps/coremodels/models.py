@@ -1,5 +1,5 @@
 from django.db import models
-
+from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin, Group, Permission
 class Clientes(models.Model):
     id = models.AutoField(primary_key=True)  # Gerar um novo ID único no banco consolidado
     id_original = models.CharField(max_length=255, default='nun')  # Manter o ID original de cada site
@@ -67,3 +67,48 @@ class ItemVenda(models.Model):
 
     def __str__(self):
         return f"Item {self.produto} do pedido {self.venda}"
+
+class UserManager(BaseUserManager):
+    def create_user(self, email, password=None, **extra_fields):
+        if not email:
+            raise ValueError("O email é obrigatório")
+        email = self.normalize_email(email)
+        user = self.model(email=email, **extra_fields)
+        user.set_password(password)
+        user.save(using=self._db)
+        return user
+
+    def create_superuser(self, email, password=None, **extra_fields):
+        extra_fields.setdefault("is_staff", True)
+        extra_fields.setdefault("is_superuser", True)
+        return self.create_user(email, password, **extra_fields)
+
+class User(AbstractBaseUser, PermissionsMixin):
+    email = models.EmailField(unique=True)
+    name = models.CharField(max_length=255)
+    is_active = models.BooleanField(default=True)
+    is_staff = models.BooleanField(default=False)
+    admin_password = models.CharField(max_length=128, blank=True, null=True)  # Senha ADM
+
+    groups = models.ManyToManyField(
+        Group,
+        related_name="core_user_set",
+        blank=True,
+        help_text="Os grupos a que o usuário pertence.",
+        verbose_name="grupos",
+    )
+    user_permissions = models.ManyToManyField(
+        Permission,
+        related_name="core_user_permissions_set",
+        blank=True,
+        help_text="As permissões específicas do usuário.",
+        verbose_name="permissões de usuário",
+    )
+
+    objects = UserManager()
+
+    USERNAME_FIELD = "email"
+    REQUIRED_FIELDS = ["name"]
+
+    def __str__(self):
+        return self.email
