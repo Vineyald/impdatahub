@@ -1,99 +1,89 @@
 $primary-color: #202020;
-$secondary-color: #2ecc71;
+$secondary-color: #202020;
 $background-color: #f9f9f9;
 $text-color: #333;
-$border-radius: 5px;
+$border-radius: 15px;
 
 .client-profile {
-  background-color: $background-color;
   padding: 45px;
-  border-radius: 15px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
 
-  h1 {
+  h1, h2 {
     color: $primary-color;
-    margin-bottom: 20px;
+    text-align: center;
   }
 
-  h2 {
-    color: $text-color;
-    margin-top: 30px;
-    margin-bottom: 10px;
-  }
-
-  .form-group {
-    margin-bottom: 15px;
-
-    label {
-      display: block;
-      font-weight: bold;
-      margin-bottom: 5px;
-      color: $text-color;
-    }
-
-    input {
-      width: 100%;
-      padding: 10px;
-      border: 1px solid #ccc;
-      border-radius: $border-radius;
-      transition: border 0.3s;
-
-      &:focus {
-        border-color: $primary-color;
-        outline: none;
-      }
-    }
-  }
-
-  button {
-    background-color: $secondary-color;
-    color: white;
-    border: none;
-    padding: 10px 15px;
+  .client-details,
+  .chart-section {
+    background-color: transparent;
+    text-align: center;
+    padding: 20px;
     border-radius: $border-radius;
-    cursor: pointer;
-    transition: background-color 0.3s;
-
-    &:hover {
-      background-color: darken($secondary-color, 10%);
-    }
-
-    & + button {
-      background-color: #e74c3c; // Cancel button
-      margin-left: 10px;
-
-      &:hover {
-        background-color: darken(#e74c3c, 10%);
-      }
-    }
   }
 
-  .client-info {
-    padding: 15px !important;
-    background-color: white;
-    border-radius: $border-radius;
-    margin-bottom: 20px;
-    box-shadow: 0 1px 5px rgba(0, 0, 0, 0.1);
+  .client-details {
+    display: flex;
+    flex-direction: column;
+    justify-content: center;
+    margin-right: 20px;
+    flex: 1;
 
     p {
-      margin: 5px 0;
       color: $text-color;
+      margin: 5px 0;
     }
+
+    button {
+      background-color: $secondary-color;
+      color: white;
+      border: none;
+      padding: 10px 15px;
+      border-radius: $border-radius;
+      cursor: pointer;
+      transition: background-color 0.3s;
+      margin: 10px;
+
+      &:hover {
+        background-color: darken($secondary-color, 10%);
+      }
+
+    }
+  }
+
+  .chart-section {
+    flex: 1;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    .chart-title {
+      color: $primary-color;
+      font-size: 1.2rem;
+      margin-bottom: 10px;
+    }
+  }
+
+  .content-row {
+    display: flex;
+    gap: 20px;
   }
 }
 
-.container {
-  margin-top: 20px;
+.purchases-table {
+  margin-top: 30px;
+  padding: 0 20px;
+
+  h2 {
+    color: $primary-color;
+    text-align: center;
+  }
 
   .table {
     width: 100%;
     border-collapse: collapse;
-    margin-top: 10px;
+    background-color: white;
 
     thead {
       background-color: $primary-color;
       color: white;
-
       th {
         padding: 10px;
         text-align: left;
@@ -103,19 +93,13 @@ $border-radius: 5px;
     tbody {
       tr {
         &:nth-child(even) {
-          background-color: #f9f9f9;
+          background-color: #f5f5f5;
         }
-
         td {
           padding: 10px;
           border: 1px solid #ddd;
         }
       }
     }
-  }
-
-  p {
-    text-align: center;
-    color: $text-color;
   }
 }
