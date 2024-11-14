@@ -21,6 +21,8 @@ interface ClientInfo {
 }
 
 const PurchasesBarChart = dynamic(() => import('./charts/purchases-bar-chart'), { ssr: false });
+const LastPurchaseLineChart = dynamic(() => import('./charts/last-purchase-line-chart'), { ssr: false });
+const InactiveClientsChoroplethMap = dynamic(() => import('./charts/heatmap-chart'), { ssr: false });
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -34,7 +36,7 @@ export default function InactiveClients() {
         const cachedTimestamp = localStorage.getItem('inactiveClientsDataTimestamp');
         const now = Date.now();
   
-        // Verifique se os dados têm menos de 30 minutos
+        // Verifique se os dados têm menos de 15 minutos
         if (cachedData && cachedTimestamp && now - parseInt(cachedTimestamp, 10) < 15 * 60 * 1000) {
           setData(JSON.parse(cachedData));
         } else {
@@ -120,13 +122,13 @@ export default function InactiveClients() {
 
             {/*<Card className="p-4 col-span-4 md:col-span-2 2xl:col-span-3">
               <PurchasesBarChart />  
-            </Card>
+            </Card>*/}
 
-            <Card className="p-4 col-span-4 md:col-span-2 2xl:col-span-3">
+            <Card className="p-4 col-span-4 md:col-span-2 2xl:col-span-4">
               <LastPurchaseLineChart />
             </Card>
 
-            <Card className="col-span-4 md:col-span-4 lg:col-span-4 p-4 2xl:col-span-3">
+            {/*<Card className="col-span-4 md:col-span-4 lg:col-span-4 p-4 2xl:col-span-3">
               <OriginPieChart />
             </Card>
 
@@ -140,11 +142,11 @@ export default function InactiveClients() {
 
             <Card className="col-span-4 md:col-span-2 lg:col-span-2 p-4 2xl:col-span-3">
               <ValueDiscountBarChart />
-            </Card>
+            </Card>*/}
 
-            <Card className="col-span-4 md:col-span-2 lg:col-span-2 p-4 2xl:col-span-3">
-              <HeatmapChart />
-            </Card> */}
+            <Card className="col-span-4 md:col-span-4 lg:col-span-4 p-4 2xl:col-span-9">
+              <InactiveClientsChoroplethMap />
+            </Card> 
           </div>
         </>
       )}

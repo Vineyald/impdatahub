@@ -22,6 +22,6 @@
       "@/*": ["./src/*"]
     }
   },
-  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", "src/app/customers/customer-profile/page.js"],
+  "include": ["next-env.d.ts", "**/*.ts", "**/*.tsx", ".next/types/**/*.ts", "src/app/customers/customer-profile/page.js", "src/app/customers/customer-inactive/charts/heatmap-chart.tsxx"],
   "exclude": ["node_modules"]
 }

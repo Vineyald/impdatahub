@@ -141,6 +141,12 @@ const PurchasesBarChart: React.FC = () => {
             type: 'bar',
             marker: { color: ['#005f73', '#0a9396', '#94d2bd', '#e9d8a6'] },
             hovertemplate: '<b>%{y} clientes inativos</b><extra></extra>',
+            hoverlabel: {
+              bgcolor: '#ffffff',         // Cor de fundo do "card"
+              font: { color: '#333', size: 14 },  // Cor e tamanho do texto
+              bordercolor: '#005f73',     // Cor da borda do "card"
+              align: 'left',            // Alinhamento do texto
+            },
             text: chartData.map((data) => data.value.toString()),
           },
         ]}
@@ -163,7 +169,7 @@ const PurchasesBarChart: React.FC = () => {
           }
         }}
         useResizeHandler={true}
-        style={{ width: '100%', height: '300px' }}
+        style={{ width: '100%', height: '500px' }}
         className="containers"
         config={{ displayModeBar: false }}
       />

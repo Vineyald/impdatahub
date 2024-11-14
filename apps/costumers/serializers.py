@@ -9,6 +9,7 @@ class ClientSerializer(serializers.ModelSerializer):
 class PurchaseSerializer(serializers.ModelSerializer):
     numero_venda = serializers.CharField(source='venda.numero_venda_original')
     data_compra = serializers.DateField(source='venda.data_compra')
+    situacao = serializers.CharField(source='venda.situacao')
     produto = serializers.CharField(source='produto.descricao')
     preco_unitario = serializers.DecimalField(source='produto.preco_unitario', max_digits=10, decimal_places=2, allow_null=True)
     quantidade_produto = serializers.DecimalField(max_digits=10, decimal_places=2, allow_null=True)
@@ -22,5 +23,6 @@ class PurchaseSerializer(serializers.ModelSerializer):
         model = ItemVenda
         fields = [
             'numero_venda', 'data_compra', 'produto', 'quantidade_produto',
-            'preco_unitario', 'valor_total', 'valor_desconto', 'frete', 'preco_final', 'origem'
+            'preco_unitario', 'valor_total', 'valor_desconto', 'frete', 'preco_final',
+            'origem', 'situacao'
         ]

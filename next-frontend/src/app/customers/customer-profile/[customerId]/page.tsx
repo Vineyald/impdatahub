@@ -42,6 +42,7 @@ interface PurchasesData {
   valor_total: number;
   valor_frete: number;
   preco_final: number;
+  situacao: string;
 }
 
 export default function ClientProfilePage() {

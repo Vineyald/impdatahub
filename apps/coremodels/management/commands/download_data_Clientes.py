@@ -6,6 +6,7 @@ from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
+from webdriver_manager.chrome import ChromeDriverManager
 from selenium.webdriver.support import expected_conditions as EC
 from selenium.common.exceptions import (
     TimeoutException,
@@ -18,6 +19,7 @@ import os
 import logging
 from django.conf import settings
 import threading
+import re
 
 # Configurar o logger
 logging.basicConfig(
@@ -61,14 +63,12 @@ class Command(BaseCommand):
 
     def download_reports(self, account):
 
-        CHROMEDRIVER_PATH = settings.CHROMEDRIVER_PATH
-
         username = account['username']
         password = account['password']
         download_dir = account['download_dir']
 
         # Verificação das variáveis
-        if not username or not password or not CHROMEDRIVER_PATH:
+        if not username or not password:
             self.stderr.write(self.style.ERROR(
                 "Variáveis de configuração TINY_OLIST_USERNAME, TINY_OLIST_PASSWORD ou CHROMEDRIVER_PATH não estão definidas."
             ))
@@ -94,11 +94,11 @@ class Command(BaseCommand):
         }
         chrome_options.add_experimental_option("prefs", prefs)
 
-        # Inicializar o WebDriver
+        # Inicializar o WebDriver com webdriver-manager
         try:
-            service = Service(CHROMEDRIVER_PATH)
+            service = Service(ChromeDriverManager().install())  # Gerenciado automaticamente
             driver = webdriver.Chrome(service=service, options=chrome_options)
-            logger.info("WebDriver inicializado com sucesso.")
+            logger.info("WebDriver inicializado com sucesso usando webdriver-manager.")
         except WebDriverException as e:
             self.stderr.write(self.style.ERROR(f"Erro ao inicializar o WebDriver: {e}"))
             logger.error(f"Erro ao inicializar o WebDriver: {e}")
@@ -179,9 +179,10 @@ class Command(BaseCommand):
 
             # Navegar para a página de exportação de contatos
             self.stdout.write("Navegando para a página de exportação de contatos...")
-            driver.get('https://erp.tiny.com.br/exportacao_contatos?campoPesquisa=nenhum&criterio=opc-todos&dataInativoDesde=&idMunicipio=0&descricaoMunicipio=&idVendedor=0&nomeVendedor=&ordenacao=nome&pesquisa=&tipo=opc-todos&uf=&tipoPeriodo=no_filter&dataIni=&dataFim=&mesAno=10%252F2024')
+            driver.get('https://erp.tiny.com.br/exportacao_contatos?campoPesquisa=nenhum&criterio=opc-todos&dataInativoDesde=&idMunicipio=0&descricaoMunicipio=&idVendedor=0&nomeVendedor=&ordenacao=nome&pesquisa=&tipo=opc-todos&uf=&tipoPeriodo=no_filter&dataIni=&dataFim=&mesAno=11%252F2024')
             logger.info("Página de exportação de contatos acessada.")
 
+            time.sleep(10)
 
             # Esperar os botões de download estarem presentes
             self.stdout.write("Esperando os botões de download aparecerem...")
@@ -215,17 +216,14 @@ class Command(BaseCommand):
                 onclick_value = button.get_attribute('onclick')
                 if onclick_value:
                     try:
-                        # Extrair o número dentro de baixarArquivo(N)
-                        # Exemplo: baixarArquivo(0)
-                        start = onclick_value.find('baixarArquivo(')
-                        if start == -1:
-                            raise ValueError("Função 'baixarArquivo' não encontrada.")
-                        start += len('baixarArquivo(')
-                        end = onclick_value.find(')', start)
-                        index_str = onclick_value[start:end]
-                        index = int(index_str)
-                        download_indices.append(index)
-                        logger.debug(f"Índice de download encontrado: {index}")
+                        # Usar expressão regular para capturar o número antes da vírgula
+                        match = re.search(r'baixarArquivo\((\d+),', onclick_value)
+                        if match:
+                            index = int(match.group(1))
+                            download_indices.append(index)
+                            logger.debug(f"Índice de download encontrado: {index}")
+                        else:
+                            raise ValueError("Índice não encontrado no atributo 'onclick'.")
                     except (IndexError, ValueError) as e:
                         logger.warning(f"Não foi possível extrair o índice do botão: {onclick_value} - {e}")
 

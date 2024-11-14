@@ -122,25 +122,36 @@ class Command(BaseCommand):
             model.objects.filter(nome='Consumidor Final').delete()
 
     def get_existing_objects(self, model, df, mapping, model_name):
-        unique_fields = self.UNIQUE_FIELDS.get(model_name)
+        unique_fields = self.UNIQUE_FIELDS.get(model_name, [])
         if not unique_fields:
             return {}
 
+        # Mapeia as colunas únicas do CSV para os campos do modelo
         unique_mapping_keys = [self.get_key_from_value(mapping, field) for field in unique_fields]
-        unique_values = df[unique_mapping_keys].drop_duplicates().dropna()
-        keys = unique_values.apply(lambda row: '|'.join(str(row[col]).strip().lower() for col in unique_mapping_keys), axis=1).tolist()
+        filter_criteria = []
 
+        for _, row in df.iterrows():
+            criteria = Q()
+            for field, key in zip(unique_fields, unique_mapping_keys):
+                criteria &= Q(**{field: row[key]})
+            filter_criteria.append(criteria)
+
+        # Recupera objetos correspondentes
         existing_objects = {}
-        for obj in model.objects.filter(Q(**{unique_fields[0]: keys})):
-            key = '|'.join([str(getattr(obj, field)).strip().lower() for field in unique_fields])
-            existing_objects[key] = obj
+        if filter_criteria:
+            query = filter_criteria[0]
+            for criterion in filter_criteria[1:]:
+                query |= criterion
+
+            for obj in model.objects.filter(query):
+                key = '|'.join([str(getattr(obj, field)).strip().lower() for field in unique_fields])
+                existing_objects[key] = obj
 
         return existing_objects
 
     def prepare_records(self, df, mapping, existing_objects, model, model_name):
         unique_fields = self.UNIQUE_FIELDS.get(model_name, [])
         unique_mapping_keys = [self.get_key_from_value(mapping, field) for field in unique_fields]
-        df = df.drop_duplicates(subset=unique_mapping_keys)
 
         new_records, updated_records = [], []
         seen_unique_values = set()
@@ -160,6 +171,7 @@ class Command(BaseCommand):
             existing_obj = existing_objects.get(standardized_unique)
 
             if existing_obj:
+                # Atualizar os campos do objeto existente
                 for field, value in data.items():
                     setattr(existing_obj, field, value)
                 updated_records.append(existing_obj)
@@ -167,6 +179,7 @@ class Command(BaseCommand):
                 new_records.append(model(**data))
 
         return new_records, updated_records
+
 
     def process_row(self, mapping, row, model_name):
         data = {}
@@ -228,7 +241,12 @@ class Command(BaseCommand):
 
     def bulk_update_existing_records(self, model, updated_records):
         if updated_records:
-            fields_to_update = [field.name for field in model._meta.fields if field.name != model._meta.pk.name]
+            # Determina os campos a serem atualizados
+            fields_to_update = [
+                field.name
+                for field in model._meta.fields
+                if field.name != model._meta.pk.name  # Não atualiza a PK
+            ]
             try:
                 model.objects.bulk_update(updated_records, fields=fields_to_update)
             except IntegrityError as e:

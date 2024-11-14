@@ -109,9 +109,6 @@ const InactiveClientsOverview = () => {
           <TableColumn key="dias_inativo" allowsSorting>
             Dias Inativos
           </TableColumn>
-          <TableColumn key="origem" allowsSorting>
-            Origem
-          </TableColumn>
         </TableHeader>
         <TableBody items={paginatedClients}>
           {(client) => (

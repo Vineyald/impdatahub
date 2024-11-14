@@ -7,6 +7,7 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait, Select
 from selenium.webdriver.support import expected_conditions as EC
+from webdriver_manager.chrome import ChromeDriverManager
 from selenium.common.exceptions import (
     TimeoutException,
     NoSuchElementException,
@@ -63,14 +64,12 @@ class Command(BaseCommand):
 
     def download_reports(self, account):
 
-        CHROMEDRIVER_PATH = settings.CHROMEDRIVER_PATH
-
         username = account['username']
         password = account['password']
         download_dir = account['download_dir']
 
         # Verificação das variáveis
-        if not username or not password or not CHROMEDRIVER_PATH:
+        if not username or not password:
             self.stderr.write(self.style.ERROR(
                 "Variáveis de configuração TINY_OLIST_USERNAME, TINY_OLIST_PASSWORD ou CHROMEDRIVER_PATH não estão definidas."
             ))
@@ -96,14 +95,14 @@ class Command(BaseCommand):
         }
         chrome_options.add_experimental_option("prefs", prefs)
 
-        # Inicializar o WebDriver
+        # Inicializar o WebDriver com webdriver-manager
         try:
-            service = Service(CHROMEDRIVER_PATH)
+            service = Service(ChromeDriverManager().install())  # Gerenciado automaticamente
             driver = webdriver.Chrome(service=service, options=chrome_options)
-            logger.info(f"WebDriver inicializado com sucesso para {username}.")
+            logger.info("WebDriver inicializado com sucesso usando webdriver-manager.")
         except WebDriverException as e:
-            self.stderr.write(self.style.ERROR(f"Erro ao inicializar o WebDriver para {username}: {e}"))
-            logger.error(f"Erro ao inicializar o WebDriver para {username}: {e}")
+            self.stderr.write(self.style.ERROR(f"Erro ao inicializar o WebDriver: {e}"))
+            logger.error(f"Erro ao inicializar o WebDriver: {e}")
             return
 
         wait = WebDriverWait(driver, 60)

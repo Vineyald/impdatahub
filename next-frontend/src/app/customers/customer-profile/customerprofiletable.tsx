@@ -10,6 +10,7 @@ import {
   TableCell,
   Pagination,
   SortDescriptor,
+  Chip,
 } from "@nextui-org/react";
 
 interface PurchasesData {
@@ -22,6 +23,7 @@ interface PurchasesData {
   valor_total: number;
   valor_frete: number;
   preco_final: number;
+  situacao: string;
 }
 
 interface ClientProfileTableProps {
@@ -32,9 +34,16 @@ const ClientProfileTable: React.FC<ClientProfileTableProps> = ({ purchases }) =>
   const [page, setPage] = useState(1);
   const [sortDescriptor, setSortDescriptor] = useState<SortDescriptor>({
     column: 'numero_venda',
-    direction: 'ascending', // Usando string diretamente
+    direction: 'ascending',
   });
   const rowsPerPage = 10;
+
+  const statusColorMap: { [key: string]: "success" | "danger" | "warning" | "primary" | "default" } = {
+    Entregue: "success",
+    Envidado: "warning",
+    Faturado: "warning",
+    Cancelado: "danger",
+  };
 
   // Função de ordenação
   const sortedPurchases = useMemo(() => {
@@ -82,16 +91,16 @@ const ClientProfileTable: React.FC<ClientProfileTableProps> = ({ purchases }) =>
             />
           </div>
         }
-        className="md:max-w-5xl 2xl:max-w-screen-2xl mx-auto"
+        className="md:w-full 2xl:max-w-screen-2xl mx-auto"
       >
         <TableHeader>
-          <TableColumn key="numero_venda" allowsSorting>
+          <TableColumn key="numero_venda" allowsSorting className='max-w-32'>
             Número da Venda
           </TableColumn>
-          <TableColumn key="data_compra" allowsSorting>
+          <TableColumn key="data_compra" allowsSorting className='max-w-32'>
             Data da Compra
           </TableColumn>
-          <TableColumn key="produto">Produto</TableColumn>
+          <TableColumn key="produto" className='max-w-32'>Produto</TableColumn>
           <TableColumn key="quantidade_produto" allowsSorting>
             Quantidade
           </TableColumn>
@@ -102,21 +111,36 @@ const ClientProfileTable: React.FC<ClientProfileTableProps> = ({ purchases }) =>
           <TableColumn key="preco_final" allowsSorting>
             Preço Final
           </TableColumn>
+          <TableColumn key="situacao">Situação</TableColumn>
         </TableHeader>
         <TableBody items={paginatedPurchases}>
-          {(purchase) => (
-            <TableRow key={`${purchase.numero_venda}-${purchase.produto}`}>
-              <TableCell>{purchase.numero_venda}</TableCell>
-              <TableCell>{purchase.data_compra}</TableCell>
-              <TableCell>{purchase.produto}</TableCell>
-              <TableCell>{purchase.quantidade_produto}</TableCell>
-              <TableCell>R$ {purchase.preco_unitario}</TableCell>
-              <TableCell>R$ {purchase.valor_desconto}</TableCell>
-              <TableCell>R$ {purchase.valor_total}</TableCell>
-              <TableCell>R$ {purchase.valor_frete}</TableCell>
-              <TableCell>R$ {purchase.preco_final}</TableCell>
-            </TableRow>
-          )}
+          {(purchase) => {
+            const statusColor =
+              statusColorMap[purchase.situacao] || "default"; // Fallback seguro
+            return (
+              <TableRow key={`${purchase.numero_venda}-${purchase.produto}`}>
+                <TableCell>{purchase.numero_venda}</TableCell>
+                <TableCell>{purchase.data_compra}</TableCell>
+                <TableCell>{purchase.produto}</TableCell>
+                <TableCell>{purchase.quantidade_produto}</TableCell>
+                <TableCell>R$ {purchase.preco_unitario}</TableCell>
+                <TableCell>R$ {purchase.valor_desconto}</TableCell>
+                <TableCell>R$ {purchase.valor_total}</TableCell>
+                <TableCell>R$ {purchase.valor_frete}</TableCell>
+                <TableCell>R$ {purchase.preco_final}</TableCell>
+                <TableCell>
+                  <Chip
+                    className="capitalize"
+                    color={statusColor}
+                    size="sm"
+                    variant="flat"
+                  >
+                    {purchase.situacao}
+                  </Chip>
+                </TableCell>
+              </TableRow>
+            );
+          }}
         </TableBody>
       </Table>
     </div>

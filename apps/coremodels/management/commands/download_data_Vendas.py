@@ -7,6 +7,7 @@ from selenium.webdriver.chrome.service import Service
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
+from webdriver_manager.chrome import ChromeDriverManager
 from selenium.common.exceptions import (
     TimeoutException,
     NoSuchElementException,
@@ -96,14 +97,12 @@ class Command(BaseCommand):
 
     def download_reports(self, account, link):
 
-        CHROMEDRIVER_PATH = settings.CHROMEDRIVER_PATH
-
         username = account['username']
         password = account['password']
         download_dir = account['download_dir']
 
         # Verificação das variáveis
-        if not username or not password or not CHROMEDRIVER_PATH:
+        if not username or not password:
             self.stderr.write(self.style.ERROR(
                 "Variáveis de configuração TINY_OLIST_USERNAME, TINY_OLIST_PASSWORD ou CHROMEDRIVER_PATH não estão definidas."
             ))
@@ -129,14 +128,14 @@ class Command(BaseCommand):
         }
         chrome_options.add_experimental_option("prefs", prefs)
 
-        # Inicializar o WebDriver
+        # Inicializar o WebDriver com webdriver-manager
         try:
-            service = Service(CHROMEDRIVER_PATH)
+            service = Service(ChromeDriverManager().install())  # Gerenciado automaticamente
             driver = webdriver.Chrome(service=service, options=chrome_options)
-            logger.info(f"WebDriver inicializado com sucesso para {username}.")
+            logger.info("WebDriver inicializado com sucesso usando webdriver-manager.")
         except WebDriverException as e:
-            self.stderr.write(self.style.ERROR(f"Erro ao inicializar o WebDriver para {username}: {e}"))
-            logger.error(f"Erro ao inicializar o WebDriver para {username}: {e}")
+            self.stderr.write(self.style.ERROR(f"Erro ao inicializar o WebDriver: {e}"))
+            logger.error(f"Erro ao inicializar o WebDriver: {e}")
             return
 
         wait = WebDriverWait(driver, 60)  # Espera máxima de 20 segundos
@@ -259,7 +258,7 @@ class Command(BaseCommand):
             self.stdout.write("Clicando no botão de download do relatório...")
             try:
                 self.stderr.write(f'Clicando em download para {account["type"]}')
-                time.sleep(5)
+                time.sleep(20)
                 btn_download = wait.until(
                     EC.element_to_be_clickable(
                         (By.XPATH, '//button[@class="btn btn-default" and contains(.,"download")]')
@@ -284,7 +283,7 @@ class Command(BaseCommand):
                 logger.info("Botão 'processar outro arquivo' clicado.")
             except TimeoutException:
                 logger.error("Botão 'processar outro arquivo' não encontrado ou não clicável.")
-                self.stderr.write(self.style.ERROR("Botão 'processar outro arquivo' não encontrado ou não clicável."))
+                self.stderr.write(self.style.ERROR(f"Botão 'processar outro arquivo' não encontrado ou não clicável para {account["type"]}."))
                 return
 
             # 8. Clicar em "Continuar" na aba aberta
@@ -302,7 +301,7 @@ class Command(BaseCommand):
                 self.stderr.write(self.style.ERROR("Botão 'Continuar' não encontrado ou não clicável."))
                 return
 
-            time.sleep(30)
+            time.sleep(60)
 
             # 9. Aguardar a barra de carregamento terminar
             self.stdout.write("Aguardando a conclusão da barra de carregamento...")

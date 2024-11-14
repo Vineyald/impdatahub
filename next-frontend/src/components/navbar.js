@@ -74,10 +74,10 @@ export default function App() {
                 Dashboard Clientes
               </Button>
             </DropdownTrigger>
-            <DropdownMenu variant="faded" aria-label="Dropdown menu" disabledKeys={["custumer_filters","custumer_metrics"]}>
+            <DropdownMenu variant="faded" aria-label="Dropdown menu" disabledKeys={["custumer_metrics"]}>
               <DropdownItem key="custumer_inactive" href="/customers/customer-inactive/">Clientes Inativos</DropdownItem>
               <DropdownItem key="custumer_ranking" href="/customers/customer-ranking/">Ranking de Clientes</DropdownItem>
-              <DropdownItem key="custumer_filters">Filtrar Clientes</DropdownItem>
+              <DropdownItem key="custumer_filters" href="/customers/customer-list/">Filtrar Clientes</DropdownItem>
               <DropdownItem key="custumer_metrics">Clientes sem Compras</DropdownItem>
             </DropdownMenu>
           </Dropdown>

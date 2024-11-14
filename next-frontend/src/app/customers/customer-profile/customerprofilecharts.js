@@ -22,8 +22,10 @@ const ClientProfileCharts = ({ purchases, onMonthSelect }) => {
   
       // Adiciona o número da venda ao Set se ainda não foi adicionado
       if (!acc[key].has(purchase.numero_venda)) {
-        acc[key].add(purchase.numero_venda);
-        acc[key].total = (acc[key].total || 0) + parseFloat(purchase.preco_final);
+        if (purchase.situacao != "Cancelado"){
+          acc[key].add(purchase.numero_venda);
+          acc[key].total = (acc[key].total || 0) + parseFloat(purchase.preco_final);
+        }
       }
   
       return acc;
