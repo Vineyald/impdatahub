@@ -1,8 +1,12 @@
 # Impdatahub - a data analisis website
-A [brief description] that solves [problem/challenge]. Built with [Django, Next.js, PlotlyJs].
+### Description
+
+**Impdatahub** is a comprehensive data analytics platform designed to streamline the analysis of metrics across various business domains. The platform tackles the challenges of managing and visualizing data from diverse sources by providing an automated workflow for data extraction, processing, and presentation. With interactive dashboards and a responsive interface, Impdatahub ensures data-driven insights are accessible and actionable for businesses of all sizes.
+
+Built with **Django**, **Next.js**, and **PlotlyJS**, this solution integrates backend robustness with a dynamic frontend, offering seamless data visualization and user-friendly navigation.
 
 ## Technologies
-<h2 align="center">⚒️ Languages-Frameworks-Tools ⚒️</h2>
+<h3 align="center">⚒️ Languages-Frameworks-Tools ⚒️</h3>
 <br/>
 <div align="center">
     <img src="https://skillicons.dev/icons?i=react,bootstrap,django,html,css,vscode,github,tailwind,git" />
@@ -16,34 +20,56 @@ A [brief description] that solves [problem/challenge]. Built with [Django, Next.
 - Interactive charts for data analysis.
 - Suport for any device. 
 
+## Architecture Overview
+- **Backend:** Built with Django REST Freamework, featuring modularized apps for scalability.
+- **Frontend:** Developed with Next.js for server-side rendering and React components.
+- **Database:** PostgreSQL with relational modeling for business insights.
+- **Data Processing:** Web scraping and automation pipelines using Selenium and Python scripts.
+
+
 ## Screenshots
-![Login Page](./docs/screenshots/login.png)
-![Dashboard](./docs/screenshots/dashboard.png)
+Note: The charts displayed in the screenshots are intentionally left empty for security reasons, as this is a real project currently under development.
+
+![Login Page](./images/Login%20pages.png)
+![Example of page](./images/Ranking%20clients.png)
+![Another example](./images/List%20of%20clients.png)
 
 ## Getting Started
 ### Prerequisites
 1. Install Python
-2. Install dependencies: `pip install -r requirements.txt`
-3. Navigate to the front-end files: `cd .\next-frontend\`
-4. Install dependencies: `npm install`
+2. Create and run a new virtual enviroment
 
-### Run Locally
-at the Django app base dir (imptadahub)
 ```bash
-python manage.py runserver
+python venv venv
+python venv/Scrips/activate #or venv/bin/activate for ubuntu
 ```
 
-now run the Next server in the "next-frontend" dir
+3. Install dependencies: `pip install -r requirements.txt`
+4. Navigate to the front-end files: `cd .\next-frontend\`
+5. Install dependencies: `npm install`
+
+### Run Locally
+at the Django app base dir (imptadahub) with the venv activated
 ```bash
-npm run build # use run dev in case you want a development env
+(venv) python manage.py runserver
+```
+
+now run the NextJS server in the "next-frontend" dir
+```bash
+cd ./next-frontend/
+npm run build # use "run dev" in case you want a development env
 npm start
 ```
 
 Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
 ## Lessons Learned
-- Learned integration of Django + React.
-- How to implement and drop a Next.Js project
-- How to work with data plotting using PlotlySJ
+- Gained foundational knowledge of integrating Django and React to build a seamless full-stack application.
+- Mastered setting up and configuring a Next.js project from scratch, including learning how to build and deploy it effectively.
+- Learned to create and customize interactive data visualizations using PlotlyJS, enhancing data interpretation and user experience.
+- Developed skills in setting up and automating data extraction pipelines with Selenium, enabling efficient integration with sales platforms.
+- Acquired experience in database design and management with PostgreSQL, focusing on scalable and efficient data storage.
+- Strengthened understanding of frontend frameworks (React, TailwindCSS) and their application in responsive design.
+- Enhanced problem-solving abilities by tackling real-world challenges in a complex, multi-technology environment.
 
 
