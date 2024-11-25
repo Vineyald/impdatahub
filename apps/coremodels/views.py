@@ -1,3 +1,4 @@
+from django.conf import settings
 from rest_framework.response import Response
 from rest_framework.decorators import (
     api_view,
@@ -32,7 +33,7 @@ from django.utils import timezone
 from datetime import timedelta
 from datetime import datetime
 
-ADMIN_PASSWORD = "ADM@@NEWpass7009##"
+ADMIN_PASSWORD = settings.ADMINPASS
 
 # Função para padronizar os nomes (capitalizar corretamente)
 def padronizar_nome(nome):

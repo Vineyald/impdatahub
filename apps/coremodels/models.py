@@ -1,73 +1,184 @@
 from django.db import models
-from django.contrib.auth.models import AbstractBaseUser, BaseUserManager, PermissionsMixin, Group, Permission
+from django.contrib.auth.models import (
+    AbstractBaseUser, 
+    BaseUserManager, 
+    PermissionsMixin, 
+    Group, 
+    Permission
+)
+from decimal import Decimal
+from django.db.models import Sum, F, Q
+
+'''
+==========================================================
+                    Model de Clientes
+==========================================================
+'''
+
 class Clientes(models.Model):
-    id = models.AutoField(primary_key=True)  # Gerar um novo ID único no banco consolidado
-    id_original = models.CharField(max_length=255, default='nun')  # Manter o ID original de cada site
-    origem = models.CharField(max_length=50, default='nun')  # Diferenciar a origem (ex: 'site_A', 'site_B')
+    # Identificação Básica
+    id = models.AutoField(primary_key=True)
     nome = models.CharField(max_length=255)
-    cep = models.CharField(max_length=22, null=False)
-    cpf_cnpj = models.CharField(max_length=22, null=False)
-    celular = models.CharField(max_length=22, null=False)
-    endereco = models.CharField(max_length=255, null=False)
-    tipo_pessoa = models.CharField(max_length=50, choices=[('F', 'Física'), ('J', 'Jurídica')], null=False)
+    fantasia = models.CharField(max_length=255, null=True, blank=True)
+    tipo_pessoa = models.CharField(
+        max_length=100,
+        choices=[('F', 'Física'), ('J', 'Jurídica')],
+        null=False
+    )
+    cpf_cnpj = models.CharField(max_length=180, unique=True)
+
+    # Contato
+    email = models.EmailField(max_length=255, unique=False, null=True, blank=True)
+    celular = models.CharField(max_length=150, null=True, blank=True)
+    fone = models.CharField(max_length=150, null=True, blank=True)
+
+    # Endereço
+    cep = models.CharField(max_length=100)
+    rota = models.CharField(max_length=120, null=True, blank=True)
+    endereco = models.CharField(max_length=255)
+    numero = models.CharField(max_length=100, null=True, blank=True)
+    complemento = models.CharField(max_length=255, null=True, blank=True)
+    bairro = models.CharField(max_length=100, null=True, blank=True)
+    cidade = models.CharField(max_length=100, null=True, blank=True)
+    estado = models.CharField(max_length=100, null=True, blank=True)
+
+    # Classificação e Situação
+    situacao = models.CharField(
+        max_length=200,
+        choices=[('ativo', 'Ativo'), ('inativo', 'Inativo')],
+        default='ativo'
+    )
+    vendedor = models.ForeignKey('Vendedores', on_delete=models.CASCADE, related_name='cliente_vendedor', null=True)
+    contribuinte = models.BooleanField(default=False)
+    codigo_regime_tributario = models.CharField(max_length=50, null=True, blank=True)
+    limite_credito = models.DecimalField(max_digits=15, decimal_places=2, null=True, blank=True)
+
+    def __str__(self):
+        return f"Cliente {self.nome} ({self.cpf_cnpj})"
+
+    def total_compras(self):
+        """Retorna o valor total de compras realizadas por este cliente."""
+        return self.compras_cliente.aggregate(total=Sum('preco_final'))['total'] or Decimal('0.00')
+
+    def total_descontos(self):
+        """Retorna o valor total de descontos em todas as compras do cliente."""
+        return self.compras_cliente.aggregate(total=Sum('valor_desconto'))['total'] or Decimal('0.00')
 
     class Meta:
-        unique_together = ('id_original', 'origem')  # Definir unicidade combinada
+        verbose_name = "Cliente"
+        verbose_name_plural = "Clientes"
+        ordering = ['nome']
 
-    def __str__(self):
-        return f"Cliente N° {self.id} (Origem: {self.origem}) - {self.nome}"
+'''
+==========================================================
+                    Model de Produtos
+==========================================================
+'''
 
 class Produtos(models.Model):
-    codigo = models.CharField(primary_key=True, unique=True, max_length=100)  # Não há necessidade de alterações, pois é único por produto
+    sku = models.CharField(primary_key=True, max_length=100, unique=True)
     descricao = models.CharField(max_length=255)
+    preco = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    preco_promocional = models.DecimalField(max_digits=10, decimal_places=2, null=True, blank=True)
+    estoque_disponivel = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    unidade = models.CharField(max_length=50, default="un", null=True, blank=True)
     custo = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    preco_unitario = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    estoque = models.DecimalField(max_digits=10, decimal_places=2, default=0)
 
     def __str__(self):
-        return f"Produto {self.codigo} - {self.descricao}"
+        return f"Produto {self.sku} - {self.descricao}"
+
+    def em_promocao(self):
+        return self.preco_promocional is not None and self.preco_promocional < self.preco
+
+    def estoque_suficiente(self, quantidade):
+        return self.estoque_disponivel >= quantidade
+
+    def vendas_totais(self):
+        """Retorna o total de itens vendidos deste produto."""
+        return self.itens_produto.aggregate(total=Sum('quantidade_produto'))['total'] or Decimal('0.00')
+
+    class Meta:
+        verbose_name = "Produto"
+        verbose_name_plural = "Produtos"
+        ordering = ['descricao']
+
+'''
+==========================================================
+                    Model de Vendedores
+==========================================================
+'''
 
 class Vendedores(models.Model):
-    id = models.AutoField(primary_key=True)  # Gerar um novo ID único no banco consolidado
-    id_original = models.CharField(max_length=255, default='nun')  # ID original de cada site
-    origem = models.CharField(max_length=50, default='nun')  # Diferenciar a origem
+    id = models.IntegerField(primary_key=True)
     nome = models.CharField(max_length=255)
 
     def __str__(self):
-        return f"Vendedor N° {self.id} (Origem: {self.origem}) - {self.nome}"
+        return f"Vendedor N° {self.id} - {self.nome}"
+
+    def total_vendas(self):
+        """Retorna o total de vendas realizadas por este vendedor."""
+        return self.vendas_vendedor.aggregate(total=Sum('valor_total'))['total'] or Decimal('0.00')
+
+    def total_itens_vendidos(self):
+        """Retorna o total de itens vendidos por este vendedor."""
+        return self.vendas_vendedor.aggregate(total=Sum('quantidade_produto'))['total'] or Decimal('0.00')
+
+'''
+==========================================================
+                    Model de Vendas
+==========================================================
+'''
 
 class Vendas(models.Model):
     id = models.AutoField(primary_key=True)
-    numero_venda_original = models.CharField(max_length=255, default='nun')  # Manter o ID original da venda de cada site
-    origem = models.CharField(max_length=50, default='nun')  # Diferenciar a origem (ex: 'site_A', 'site_B')
-    canal_venda = models.CharField(max_length=255, null=True)  # Permitindo nulo para preencher com "Pdv"
+    numero = models.IntegerField(null=False, default='1')
+    canal_venda = models.CharField(max_length=255, null=True)
     data_compra = models.DateField()
     situacao = models.CharField(max_length=255, null=True)
-
-    class Meta:
-        unique_together = ('numero_venda_original', 'origem')  # Definir unicidade combinada
+    loja = models.CharField(max_length=255, null=True)
 
     def __str__(self):
-        return f"Pedido {self.numero_venda_original} (Origem: {self.origem}) - {self.data_compra}"
+        return f"Pedido {self.id} - {self.data_compra}"
+
+    def total_itens(self):
+        """Retorna o número total de itens nesta venda."""
+        return self.itens_venda.aggregate(total=Sum('quantidade_produto'))['total'] or 0
+
+    def valor_total(self):
+        """Calcula o valor total desta venda."""
+        return self.itens_venda.aggregate(total=Sum(F('preco_final') - F('valor_desconto')))['total'] or Decimal('0.00')
+
+'''
+==========================================================
+                Model de Itens por Venda
+==========================================================
+'''
+    
 class ItemVenda(models.Model):
-    id_item_venda = models.AutoField(primary_key=True)  # Novo ID gerado no banco consolidado
-    venda = models.ForeignKey(Vendas, on_delete=models.CASCADE, related_name='itens_venda')  # Nome único
-    cliente = models.ForeignKey(Clientes, on_delete=models.CASCADE, related_name='compras_cliente')  # Nome mais claro
-    vendedor = models.ForeignKey(Vendedores, on_delete=models.CASCADE, related_name='vendas_vendedor')  # Nome mais claro
-    produto = models.ForeignKey(Produtos, on_delete=models.CASCADE, related_name='itens_produto')  # Nome único
+    id_item_venda = models.AutoField(primary_key=True)
+    venda = models.ForeignKey(Vendas, on_delete=models.CASCADE, related_name='itens_venda')
+    cliente = models.ForeignKey('Clientes', on_delete=models.CASCADE, related_name='compras_cliente')
+    vendedor = models.ForeignKey('Vendedores', on_delete=models.CASCADE, related_name='vendas_vendedor')
+    produto = models.ForeignKey('Produtos', on_delete=models.CASCADE, related_name='itens_produto')
     quantidade_produto = models.DecimalField(max_digits=10, decimal_places=2)
     valor_total = models.DecimalField(max_digits=10, decimal_places=2)
-    valor_desconto = models.DecimalField(max_digits=10, decimal_places=2, default=0)
-    frete = models.DecimalField(max_digits=10, decimal_places=2, default=0)
+    valor_desconto = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+    frete = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
     preco_final = models.DecimalField(max_digits=10, decimal_places=2)
-    origem = models.CharField(max_length=50, default='nun')  # Diferenciar a origem (ex: 'site_A', 'site_B')
+    loja = models.CharField(max_length=255, null=True)
 
     class Meta:
-        unique_together = ('venda', 'produto', 'origem')
-
+        unique_together = ('venda', 'produto')
 
     def __str__(self):
         return f"Item {self.produto} do pedido {self.venda}"
+
+    
+'''
+==========================================================
+                    User Auth Models
+==========================================================
+'''
 
 class UserManager(BaseUserManager):
     def create_user(self, email, password=None, **extra_fields):

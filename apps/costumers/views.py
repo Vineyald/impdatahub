@@ -22,18 +22,9 @@ from bisect import bisect_left
 def client_profile_api(request, client_id):
     # Buscar o cliente pelo ID
     cliente = get_object_or_404(Clientes, id=client_id)
-    origem_oposta = 'imp' if cliente.origem == 'servi' else 'servi'
-
-    # Tentar encontrar um cliente com o mesmo nome na origem oposta
-    cliente_oposto = Clientes.objects.filter(nome=cliente.nome, origem=origem_oposta).first()
 
     # Buscar todas as compras do cliente atual
     compras_cliente = ItemVenda.objects.filter(cliente=cliente).select_related('venda', 'produto')
-
-    # Buscar as compras do cliente na origem oposta, se houver
-    if cliente_oposto:
-        compras_cliente_oposto = ItemVenda.objects.filter(cliente=cliente_oposto).select_related('venda', 'produto')
-        compras_cliente = compras_cliente.union(compras_cliente_oposto)  # Unir as compras de ambas origens
 
     # Serializar dados do cliente e das compras
     client_data = ClientSerializer(cliente).data
@@ -67,29 +58,28 @@ def all_active_clients_with_pdv_sales(request):
         hoje = now().date()
         data_padrao = hoje
 
-        # Buscar clientes e anotar a última compra por origem (ignorando vendas canceladas)
+        # Buscar clientes e anotar a última compra (ignorando vendas canceladas)
         clientes_filtrados = Clientes.objects.annotate(
             ultima_compra=Coalesce(
                 Max(
                     "compras_cliente__venda__data_compra",
                     filter=Q(compras_cliente__venda__canal_venda="Pdv") & ~Q(compras_cliente__venda__situacao="Cancelado")
                 ),
-                Value(data_padrao)
+                Value(None)  # Valor padrão será None para filtrar mais facilmente
             )
-        ).exclude(nome__iexact="Consumidor Final")
-
-        # Agrupar clientes por nome para identificar origens
-        clientes_por_nome = defaultdict(list)
-        for cliente in clientes_filtrados:
-            clientes_por_nome[cliente.nome].append(cliente)
+        ).exclude(
+            nome__iexact="Consumidor Final"
+        ).filter(
+            ultima_compra__isnull=False  # Apenas clientes com pelo menos uma compra
+        )
 
         # Carregar todas as compras relevantes de uma vez (ignorando vendas canceladas)
         todas_compras = ItemVenda.objects.filter(
             Q(venda__canal_venda="Pdv") & ~Q(venda__situacao="Cancelado"),
             cliente_id__in=[cliente.id for cliente in clientes_filtrados]
         ).select_related("venda", "produto").only(
-            "cliente_id", "produto__descricao", "produto__preco_unitario",
-            "venda__numero_venda_original", "venda__data_compra",
+            "cliente_id", "produto__descricao", "produto__preco",
+            "venda__numero", "venda__data_compra",
             "quantidade_produto", "valor_total", "valor_desconto", "frete", "preco_final", "venda__situacao"
         )
 
@@ -98,70 +88,41 @@ def all_active_clients_with_pdv_sales(request):
         for compra in todas_compras:
             compras_por_cliente[compra.cliente_id].append(compra)
 
-        # Estrutura para armazenar clientes inativos
-        clientes_inativos = {}
+        # Estruturar os dados para clientes e suas compras
+        clientes_ativos = {}
+        for cliente in clientes_filtrados:
+            compras_cliente = compras_por_cliente[cliente.id]
 
-        for nome, clientes in clientes_por_nome.items():
-
-            # Determinar a última compra e origem final com base nas compras mais recentes
-            cliente_imp = next((c for c in clientes if c.origem == "imp"), None)
-            cliente_servi = next((c for c in clientes if c.origem == "servi"), None)
-
-            if not cliente_imp or not cliente_servi:
-                continue  # Ignorar se faltar uma das origens
-
-            # Verificar datas de inatividade
-            dias_inativo_imp = (hoje - cliente_imp.ultima_compra).days
-            dias_inativo_servi = (hoje - cliente_servi.ultima_compra).days
-
-            print(f"cliente: {nome} | {dias_inativo_imp, dias_inativo_servi}")
-
-            if dias_inativo_imp > 30 and dias_inativo_servi > 30:
-                # Definir a última compra e origem mais recente
-                if cliente_imp.ultima_compra >= cliente_servi.ultima_compra:
-                    ultima_compra = cliente_imp.ultima_compra
-                    origem_final = "imp"
-                    cliente_final = cliente_imp
-                else:
-                    ultima_compra = cliente_servi.ultima_compra
-                    origem_final = "servi"
-                    cliente_final = cliente_servi
-
-                # Usar as compras pré-carregadas para o cliente
-                compras_cliente = compras_por_cliente[cliente_final.id]
-
-                # Serializar dados do cliente e compras
-                clientes_inativos[nome] = {
-                    "info": {
-                        "id": cliente_final.id,
-                        "origem": origem_final,
-                        "nome": cliente_final.nome,
-                        "cep": cliente_final.cep,
-                        "cpf_cnpj": cliente_final.cpf_cnpj,
-                        "tipo_pessoa": cliente_final.tipo_pessoa,
-                        "ultima_compra": ultima_compra,
-                    },
-                    "purchases": [
-                        {
-                            "numero_venda": item.venda.numero_venda_original,
-                            "data_compra": item.venda.data_compra,
-                            "produto": item.produto.descricao,
-                            "quantidade_produto": item.quantidade_produto,
-                            "preco_unitario": item.produto.preco_unitario,
-                            "valor_total": item.valor_total,
-                            "valor_desconto": item.valor_desconto,
-                            "frete": item.frete,
-                            "preco_final": item.preco_final,
-                            "situacao": item.venda.situacao,  # Acessando o atributo no relacionamento
-                        }
-                        for item in compras_cliente
-                    ],
-                }
+            # Serializar dados do cliente e suas compras
+            clientes_ativos[cliente.nome] = {
+                "info": {
+                    "id": cliente.id,
+                    "nome": cliente.nome,
+                    "cep": cliente.cep,
+                    "cpf_cnpj": cliente.cpf_cnpj,
+                    "tipo_pessoa": cliente.tipo_pessoa,
+                    "ultima_compra": cliente.ultima_compra,
+                },
+                "purchases": [
+                    {
+                        "numero_venda": item.venda.numero,
+                        "data_compra": item.venda.data_compra,
+                        "produto": item.produto.descricao,
+                        "quantidade_produto": item.quantidade_produto,
+                        "preco_unitario": item.produto.preco,
+                        "valor_total": item.valor_total,
+                        "valor_desconto": item.valor_desconto,
+                        "frete": item.frete,
+                        "preco_final": item.preco_final,
+                        "situacao": item.venda.situacao,
+                    }
+                    for item in compras_cliente
+                ],
+            }
 
         # Cachear os resultados
-        cache.set("clientes_ativos_com_vendas_pdv", clientes_inativos, timeout=3600)
-        print(clientes_inativos)
-        return Response(clientes_inativos, status=200)
+        cache.set("clientes_ativos_com_vendas_pdv", clientes_ativos, timeout=3600)
+        return Response(clientes_ativos, status=200)
 
     except Exception as e:
         return Response({"error": "Ocorreu um erro inesperado.", "details": str(e)}, status=500)
@@ -309,7 +270,6 @@ def process_client_group(name, client_list, sales_by_client):
         "client_data": client_data,
         "id_to_delete": id_to_delete,
     }
-
 
 def combine_purchases(client_servi, client_imp, sales_by_client):
     """

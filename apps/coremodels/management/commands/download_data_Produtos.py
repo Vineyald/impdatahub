@@ -11,13 +11,11 @@ from webdriver_manager.chrome import ChromeDriverManager
 from selenium.common.exceptions import (
     TimeoutException,
     NoSuchElementException,
-    ElementNotInteractableException,
     WebDriverException,
 )
 import time
 import os
 import logging
-import threading
 from django.conf import settings
 
 # Configurar o logger
@@ -32,59 +30,42 @@ logger = logging.getLogger(__name__)
 
 
 class Command(BaseCommand):
-    help = 'Automatiza o login no Tiny Olist e baixa os relatórios disponíveis para múltiplas contas.'
+    help = 'Automatiza o login no Tiny Olist e baixa os relatórios disponíveis para a conta Servisign.'
 
     def handle(self, *args, **options):
+        account = {
+            'username': settings.TINY_OLIST_USERNAME_SERVI,
+            'password': settings.TINY_OLIST_PASSWORD,
+            'download_dir': os.path.join(os.getcwd(), 'temporary_files\servi')
+        }
 
-        accounts = [
-            {
-                'username': settings.TINY_OLIST_USERNAME_SERVI,
-                'password': settings.TINY_OLIST_PASSWORD,
-                'download_dir': os.path.join(os.getcwd(), 'temporary_files\servi')
-            },
-            {
-                'username': settings.TINY_OLIST_USERNAME_IMP,
-                'password': settings.TINY_OLIST_PASSWORD,
-                'download_dir': os.path.join(os.getcwd(), 'temporary_files\imp')
-            },
-        ]
+        # Executa o download dos relatórios para a conta Servisign
+        self.download_reports(account)
 
-        threads = []
-
-        for account in accounts:
-            thread = threading.Thread(target=self.download_reports, args=(account,))
-            threads.append(thread)
-            thread.start()
-
-        for thread in threads:
-            thread.join()
-
-        self.stdout.write(self.style.SUCCESS("Todos os downloads foram processados."))
-        logger.info("Todos os downloads foram processados.")
+        self.stdout.write(self.style.SUCCESS("Download concluído para a conta Servisign."))
+        logger.info("Download concluído para a conta Servisign.")
 
     def download_reports(self, account):
-
         username = account['username']
         password = account['password']
         download_dir = account['download_dir']
 
-        # Verificação das variáveis
+        # Verificar as variáveis de configuração
         if not username or not password:
             self.stderr.write(self.style.ERROR(
-                "Variáveis de configuração TINY_OLIST_USERNAME, TINY_OLIST_PASSWORD ou CHROMEDRIVER_PATH não estão definidas."
+                "Variáveis de configuração TINY_OLIST_USERNAME_SERVI ou TINY_OLIST_PASSWORD não estão definidas."
             ))
-            logger.error(
-                "Variáveis de configuração TINY_OLIST_USERNAME, TINY_OLIST_PASSWORD ou CHROMEDRIVER_PATH não estão definidas.")
+            logger.error("As variáveis de configuração necessárias não estão definidas.")
             return
 
-        # Criar diretório de download se não existir
+        # Criar o diretório de download, se necessário
         if not os.path.exists(download_dir):
             os.makedirs(download_dir)
             logger.info(f"Diretório de download criado em: {download_dir}")
 
         # Configurar opções do Chrome
         chrome_options = Options()
-        chrome_options.add_argument('--headless=new')  # Executa o Chrome em modo headless (descomente para rodar em headless)
+        chrome_options.add_argument('--headless=new')  # Modo headless
         chrome_options.add_argument('--no-sandbox')
         chrome_options.add_argument('--disable-dev-shm-usage')
         prefs = {
@@ -95,11 +76,11 @@ class Command(BaseCommand):
         }
         chrome_options.add_experimental_option("prefs", prefs)
 
-        # Inicializar o WebDriver com webdriver-manager
+        # Inicializar o WebDriver
         try:
-            service = Service(ChromeDriverManager().install())  # Gerenciado automaticamente
+            service = Service(ChromeDriverManager().install())
             driver = webdriver.Chrome(service=service, options=chrome_options)
-            logger.info("WebDriver inicializado com sucesso usando webdriver-manager.")
+            logger.info("WebDriver inicializado com sucesso.")
         except WebDriverException as e:
             self.stderr.write(self.style.ERROR(f"Erro ao inicializar o WebDriver: {e}"))
             logger.error(f"Erro ao inicializar o WebDriver: {e}")
@@ -108,157 +89,25 @@ class Command(BaseCommand):
         wait = WebDriverWait(driver, 60)
 
         try:
-            self.stdout.write(f"Acessando o site do Tiny Olist para {username}...")
-            driver.get('https://erp.tiny.com.br/login/')
-            logger.info(f"Página de login acessada para {username}.")
+            # Acessar o site e realizar o login
+            self.perform_login(driver, wait, username, password)
 
-            # Esperar o campo de username estar presente
-            self.stdout.write("Esperando o campo de E-mail ou Login...")
-            username_field = wait.until(EC.presence_of_element_located((By.NAME, 'username')))
-            logger.info("Campo de E-mail ou Login encontrado.")
+            time.sleep(5)
 
-            # Preencher o campo de username
-            self.stdout.write("Preenchendo o campo de E-mail ou Login...")
-            username_field.clear()
-            username_field.send_keys(username)
-            logger.info("Campo de E-mail ou Login preenchido.")
+            # Verificar e lidar com uma sessão existente
+            self.handle_existing_session(driver, wait)
 
-            # Esperar o campo de senha
-            self.stdout.write("Esperando o campo de Senha...")
-            password_field = wait.until(EC.presence_of_element_located((By.NAME, 'password')))
-            logger.info("Campo de Senha encontrado.")
+            time.sleep(5)
 
-            # Preencher o campo de senha
-            self.stdout.write("Preenchendo a senha...")
-            password_field.clear()
-            password_field.send_keys(password)
-            logger.info("Campo de Senha preenchido.")
-
-            # Clicar no botão de login
-            self.stdout.write("Esperando o botão de login...")
-            login_button = wait.until(
-                EC.element_to_be_clickable((By.XPATH, '//button[contains(text(), "entrar no Olist Tiny")]'))
-            )
-            logger.info("Botão de login encontrado.")
-
-            self.stdout.write("Clicando no botão de login...")
-            login_button.click()
-            logger.info("Botão de login clicado.")
-
-            time.sleep(6)  # Aguardar resposta do login
-
-            try:
-                # Aguarda até que o modal esteja presente
-                WebDriverWait(driver, 15).until(
-                    EC.presence_of_element_located((By.CLASS_NAME, "modal-dialog"))
-                )
-                logger.info("Modal detectado.")
-
-                # Verifica se o texto do modal corresponde à mensagem esperada
-                modal_title = driver.find_element(By.CLASS_NAME, "modal-title").text
-                if "Este usuário já está logado em outro dispositivo" in modal_title:
-                    # Clica no botão "login" na modal
-                    login_modal_button = driver.find_element(By.XPATH, "//button[contains(text(), 'login')]")
-                    login_modal_button.click()
-                    logger.info(f"Login realizado em nova sessão para {username}.")
-                else:
-                    logger.info("Modal com mensagem de login múltiplo não encontrado.")
-            except NoSuchElementException:
-                logger.info("Nenhum modal detectado.")
-            except TimeoutException:
-                logger.info("Nenhum modal detectado dentro do tempo esperado.")
-            except Exception as e:
-                logger.error(f"Erro ao tentar realizar o login em nova sessão para {username}: {e}")
-                self.stderr.write(
-                    self.style.ERROR(f"Erro ao tentar realizar o login em nova sessão para {username}: {e}"))
-
-            # Verificar se o login foi bem-sucedido
-            time.sleep(5)  # Aguardar redirecionamento
-
-            # Navegar para a página de exportação de produtos
-            self.stdout.write(f"Navegando para a página de exportação de produtos para {username}...")
-            driver.get('https://erp.tiny.com.br/relatorio_produtos_lista_precos')
-            logger.info(f"Página de exportação de produtos acessada para {username}.")
-
-            # Aplicar filtro de estoque usando Select
-            self.stdout.write("Aplicando filtros de estoque...")
-            try:
-                stock_filter_select_element = wait.until(EC.element_to_be_clickable((By.ID, 'exibir_estoque')))
-                stock_select = Select(stock_filter_select_element)
-                stock_select.select_by_value('D')  # Seleciona "Estoque disponível"
-                logger.info("Filtro de estoque aplicado.")
-            except (NoSuchElementException, ElementNotInteractableException) as e:
-                logger.error(f"Erro ao aplicar filtro de estoque para {username}: {e}")
-                self.stderr.write(
-                    self.style.ERROR(f"Erro ao aplicar filtro de estoque para {username}: {e}"))
-                return
-
-            # Aplicar filtro de custo usando Select
-            self.stdout.write("Aplicando filtros de custo...")
-            try:
-                cost_filter_select_element = wait.until(EC.element_to_be_clickable((By.ID, 'exibir_custo')))
-                cost_select = Select(cost_filter_select_element)
-                cost_select.select_by_value('M')  # Seleciona "Custo médio"
-                logger.info("Filtro de custo aplicado.")
-            except (NoSuchElementException, ElementNotInteractableException) as e:
-                logger.error(f"Erro ao aplicar filtro de custo para {username}: {e}")
-                self.stderr.write(
-                    self.style.ERROR(f"Erro ao aplicar filtro de custo para {username}: {e}"))
-                return
-
-            # Clicar no botão visualizar
-            self.stdout.write("Clicando no botão visualizar...")
-            try:
-                btn_view = wait.until(EC.element_to_be_clickable((By.ID, "btn-visualizar")))
-                btn_view.click()
-                logger.info("Botão visualizar clicado.")
-            except (NoSuchElementException, ElementNotInteractableException) as e:
-                logger.error(f"Erro ao clicar no botão visualizar para {username}: {e}")
-                self.stderr.write(
-                    self.style.ERROR(f"Erro ao clicar no botão visualizar para {username}: {e}"))
-                return
-
-            time.sleep(15)  # Aguardar a geração do relatório
-
-            # Clicar no botão de download
-            self.stdout.write("Clicando no botão de download...")
-            try:
-                btn_download = wait.until(EC.element_to_be_clickable((By.ID, "btn-download")))
-                btn_download.click()
-                logger.info("Botão de download clicado.")
-            except (NoSuchElementException, ElementNotInteractableException) as e:
-                logger.error(f"Erro ao clicar no botão de download para {username}: {e}")
-                self.stderr.write(
-                    self.style.ERROR(f"Erro ao clicar no botão de download para {username}: {e}"))
-                return
-
-            # Clicar no botão de exportação do relatório
-            self.stdout.write("Clicando no botão de exportação do relatório...")
-            try:
-                btn_export = wait.until(EC.element_to_be_clickable((By.ID, "btnExportarRelatorio")))
-                btn_export.click()
-                logger.info("Botão de exportação do relatório clicado.")
-            except (NoSuchElementException, ElementNotInteractableException) as e:
-                logger.error(f"Erro ao clicar no botão de exportação do relatório para {username}: {e}")
-                self.stderr.write(
-                    self.style.ERROR(f"Erro ao clicar no botão de exportação do relatório para {username}: {e}"))
-                return
+            # Navegar para a página de exportação e baixar os relatórios
+            self.export_reports(driver, wait)
 
             # Esperar o download ser concluído
             self.stdout.write("Esperando o download ser concluído...")
-            try:
-                time.sleep(15)
-                self.wait_for_download(download_dir)
-                self.stdout.write(f"Download concluído com sucesso para {username}!")
-                logger.info(f"Download concluído com sucesso para {username}.")
-            except Exception as e:
-                logger.error(f"Erro ao esperar pelo download para {username}: {e}")
-                self.stderr.write(
-                    self.style.ERROR(f"Erro ao esperar pelo download para {username}: {e}"))
+            self.wait_for_download(download_dir)
+            self.stdout.write(f"Download concluído com sucesso para {username}!")
+            logger.info(f"Download concluído com sucesso para {username}.")
 
-        except TimeoutException as te:
-            logger.error(f"Timeout ao esperar por um elemento para {username}: {te}")
-            self.stderr.write(self.style.ERROR(f"Timeout ao esperar por um elemento para {username}: {te}"))
         except Exception as e:
             logger.error(f"Ocorreu um erro durante a automação para {username}: {e}")
             self.stderr.write(self.style.ERROR(f"Ocorreu um erro para {username}: {e}"))
@@ -266,21 +115,94 @@ class Command(BaseCommand):
             driver.quit()
             logger.info(f"Navegador fechado para {username}.")
 
+
+    def perform_login(self, driver, wait, username, password):
+        """Realiza o login no sistema."""
+        self.stdout.write(f"Acessando o site do Tiny Olist para {username}...")
+        driver.get('https://erp.tiny.com.br/login/')
+        logger.info(f"Página de login acessada para {username}.")
+
+        # Preencher os campos de login
+        username_field = wait.until(EC.presence_of_element_located((By.NAME, 'username')))
+        username_field.clear()
+        username_field.send_keys(username)
+
+        password_field = wait.until(EC.presence_of_element_located((By.NAME, 'password')))
+        password_field.clear()
+        password_field.send_keys(password)
+
+        # Clicar no botão de login
+        login_button = wait.until(EC.element_to_be_clickable((By.XPATH, '//button[contains(text(), "entrar no Olist Tiny")]')))
+        login_button.click()
+        logger.info(f"Login realizado para {username}.")
+        time.sleep(6)
+
+    def export_reports(self, driver, wait):
+        """Exporta os relatórios aplicando filtros necessários."""
+        self.stdout.write("Navegando para a página de exportação de produtos...")
+        driver.get('https://erp.tiny.com.br/relatorio_produtos_lista_precos')
+        logger.info("Página de exportação de produtos acessada.")
+
+        # Aplicar filtros e iniciar download
+        self.stdout.write("Aplicando filtros de estoque...")
+        stock_filter_select_element = wait.until(EC.element_to_be_clickable((By.ID, 'exibir_estoque')))
+        Select(stock_filter_select_element).select_by_value('D')  # Estoque disponível
+
+        self.stdout.write("Aplicando filtros de custo...")
+        cost_filter_select_element = wait.until(EC.element_to_be_clickable((By.ID, 'exibir_custo')))
+        Select(cost_filter_select_element).select_by_value('M')  # Custo médio
+
+        # Visualizar relatório
+        btn_view = wait.until(EC.element_to_be_clickable((By.ID, "btn-visualizar")))
+        btn_view.click()
+        time.sleep(15)
+
+        # Baixar o relatório
+        btn_download = wait.until(EC.element_to_be_clickable((By.ID, "btn-download")))
+        btn_download.click()
+
+        # Exportar o relatório
+        btn_export = wait.until(EC.element_to_be_clickable((By.ID, "btnExportarRelatorio")))
+        btn_export.click()
+        logger.info("Exportação do relatório iniciada.")
+
     def wait_for_download(self, download_dir, timeout=120):
-        """
-        Espera até que todos os arquivos de download sejam concluídos no diretório especificado.
-        """
+        """Espera até que todos os arquivos de download sejam concluídos no diretório especificado."""
         seconds = 0
-        download_complete = False
-        while not download_complete and seconds < timeout:
-            time.sleep(1)
-            download_complete = True
-            for filename in os.listdir(download_dir):
-                if filename.endswith('.crdownload'):
-                    download_complete = False
-                    break
+        while seconds < timeout:
+            time.sleep(10)
+            if not any(filename.endswith('.crdownload') for filename in os.listdir(download_dir)):
+                return
             seconds += 1
             if seconds % 10 == 0:
                 logger.info(f"Aguardando conclusão do download... {seconds} segundos passados.")
-        if not download_complete:
-            raise Exception("O download não foi concluído dentro do tempo esperado.")
+        raise Exception("O download não foi concluído dentro do tempo esperado.")
+    
+    def handle_existing_session(self, driver, wait):
+        """Lida com situações em que o login detecta uma sessão ativa."""
+        try:
+            logger.info("Verificando se a sessão já está ativa em outro dispositivo...")
+            
+            # Esperar o modal de sessão ativa
+            modal_dialog = wait.until(
+                EC.presence_of_element_located((By.CLASS_NAME, "modal-dialog"))
+            )
+            modal_title = modal_dialog.find_element(By.CLASS_NAME, "modal-title").text
+            logger.info(f"Modal detectado com o título: {modal_title}")
+
+            if "Sua sessão expirou" in modal_title or "Este usuário já está logado" in modal_title:
+                logger.info("Sessão ativa detectada. Tentando reconexão.")
+                
+                # Clicar no botão de reconexão
+                login_modal_button = modal_dialog.find_element(By.XPATH, ".//button[@class='btn btn-primary' and text()='login']")
+                login_modal_button.click()
+                logger.info("Reconexão realizada com sucesso.")
+            else:
+                logger.warning("O modal detectado não contém a mensagem esperada.")
+
+        except TimeoutException:
+            logger.warning("Modal de sessão ativa não apareceu dentro do tempo esperado.")
+        except NoSuchElementException as e:
+            logger.error(f"Erro ao localizar elementos no modal: {e}")
+        except Exception as e:
+            logger.error(f"Erro inesperado ao lidar com a sessão existente: {e}")

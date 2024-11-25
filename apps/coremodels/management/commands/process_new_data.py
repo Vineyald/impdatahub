@@ -14,61 +14,59 @@ class Command(BaseCommand):
 
     def handle(self, *args, **kwargs):
         model = kwargs['model']
-
-        link = {}
-
-        if model == 'ItemVenda':
-            link = {
-                "Servi": "https://erp.tiny.com.br/relatorios_personalizados#/view/19",
-                "Imp": "https://erp.tiny.com.br/relatorios_personalizados#/view/809"
-            }
-
-        elif model == 'Vendas':
-            link = {
-                "Servi": "https://erp.tiny.com.br/relatorios_personalizados#/view/496",
-                "Imp": "https://erp.tiny.com.br/relatorios_personalizados#/view/810"
-            }
-
-        # Converte o dicionário de links para JSON
+        link = get_link(model)
         links_json = json.dumps(link)
+        caminho_csv = f"datasets/csv/{model}.csv"
 
         try:
-            caminho_csv = f"datasets/csv/{model}.csv"
 
-            # Para os modelos Vendas e ItemVenda, faz o download com os links
-            if model == "Vendas" or model == "ItemVenda":
+            # Download data from tiny website
+            if model in ["Vendas", "ItemVenda"]:
                 self.stdout.write("Fazendo o download dos dados pelo Tiny")
-
-                # Passa o link como argumento para o comando
                 call_command(f'download_data_Vendas', '--link', links_json)
-
-                if model == "Vendas":
-                    #Continua com os outros comandos
-                    self.stdout.write("Concatenando os arquivos")
-                    call_command('concate_csv', model)
-
-                    self.stdout.write("Subindo no banco de dados")
-                    call_command(f'send_simple_data_to_db', caminho_csv)
-
-                else:
-                    # Continua com os outros comandos
-                    self.stdout.write("Concatenando os arquivos")
-                    call_command('concate_csv', model)
-
-                    self.stdout.write("Subindo no banco de dados")
-                    call_command(f'send_data_to_db', caminho_csv)
-
             else:
                 self.stdout.write("Fazendo o download dos dados pelo Tiny")
                 call_command(f'download_data_{model}')
+            
+            # Join the download files in a singular csv
+            call_command('concate_csv', model)
 
-                # Continua com os outros comandos
-                self.stdout.write("Concatenando os arquivos")
-                call_command('concate_csv', model)
-
+            # If its Clients, fix the ids
+            if model == "Clientes":
+                if model == "Clientes":
+                    call_command(
+                        f'Fix_clientes', 
+                        "E:/08 - Imperio DataHub/impdatahub/datasets/csv/Clientes.csv", 
+                        "E:/08 - Imperio DataHub/impdatahub/datasets/csv"
+                    )
+    
+            if model == "ItemVenda":
                 self.stdout.write("Subindo no banco de dados")
-                call_command(f'send_simple_data_to_db', caminho_csv)
+                call_command(
+                    f'send_data_to_db',
+                    caminho_csv,
+                    "datasets/csv/Clientes.csv"
+                )
+            else:
+                self.stdout.write("Subindo no banco de dados")
+                call_command('send_simple_data_to_db', caminho_csv)
+
 
             self.stdout.write(self.style.SUCCESS("Todos os comandos foram executados com sucesso!"))
         except Exception as e:
             self.stdout.write(self.style.ERROR(f"Ocorreu um erro: {e}"))
+
+def get_link(model):
+    link = {}
+    if model == 'ItemVenda':
+        link = {
+            "Servi": "https://erp.tiny.com.br/relatorios_personalizados#/view/19",
+            "Imp": "https://erp.tiny.com.br/relatorios_personalizados#/view/809"
+        }
+
+    elif model == 'Vendas':
+        link = {
+            "Servi": "https://erp.tiny.com.br/relatorios_personalizados#/view/496",
+            "Imp": "https://erp.tiny.com.br/relatorios_personalizados#/view/810"
+        }
+    return link

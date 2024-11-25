@@ -14,6 +14,7 @@ A [brief description] that solves [problem/challenge]. Built with [Django, Next.
 - Web scraping using Selenium for data extraction from sales management platforms (Tiny/Olist).
 - Automation of data processing for a PostgreSQL database.
 - Interactive charts for data analysis.
+- Suport for any device. 
 
 ## Screenshots
 ![Login Page](./docs/screenshots/login.png)
@@ -23,11 +24,22 @@ A [brief description] that solves [problem/challenge]. Built with [Django, Next.
 ### Prerequisites
 1. Install Python
 2. Install dependencies: `pip install -r requirements.txt`
+3. Navigate to the front-end files: `cd .\next-frontend\`
+4. Install dependencies: `npm install`
 
 ### Run Locally
+at the Django app base dir (imptadahub)
 ```bash
 python manage.py runserver
 ```
+
+now run the Next server in the "next-frontend" dir
+```bash
+npm run build # use run dev in case you want a development env
+npm start
+```
+
+Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
 
 ## Lessons Learned
 - Learned integration of Django + React.

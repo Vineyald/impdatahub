@@ -117,7 +117,7 @@ class Command(BaseCommand):
 
         # Configurar opções do Chrome
         chrome_options = Options()
-        chrome_options.add_argument('--headless=new')  # Executa o Chrome em modo headless (descomente para rodar com interface)
+        #chrome_options.add_argument('--headless=new')  # Executa o Chrome em modo headless (descomente para rodar com interface)
         chrome_options.add_argument('--no-sandbox')
         chrome_options.add_argument('--disable-dev-shm-usage')
         prefs = {

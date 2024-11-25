@@ -7,7 +7,9 @@ from decimal import Decimal, InvalidOperation
 from datetime import datetime
 import logging
 import re
-from django.db.models import Q
+import traceback
+from django.db import models
+
 
 logger = logging.getLogger(__name__)
 
@@ -15,42 +17,53 @@ class Command(BaseCommand):
     help = 'Importa dados de um arquivo CSV para os modelos Clientes, Vendedores, Vendas e Produtos'
 
     UNIQUE_FIELDS = {
-        'Produtos': ['codigo'],
-        'Clientes': ['id_original', 'origem'],
-        'Vendas': ['numero_venda_original', 'origem'],
+        'Produtos': ['sku'],
+        'Clientes': ['id'],
+        'Vendas': ['numero', 'loja'],
     }
 
     REQUIRED_FIELDS = {
-        'Produtos': ['codigo', 'descricao'],
-        'Clientes': ['id_original', 'origem', 'nome'],
-        'Vendas': ['numero_venda_original', 'origem'],
+        'Produtos': ['sku', 'descricao'],
+        'Clientes': ['id', 'nome'],
+        'Vendas': ['numero', 'loja'],
     }
 
     COLUMN_MAPPINGS = {
         'Produtos': {
-            'Código (SKU)': 'codigo',
-            'Descrição': 'descricao',
-            'Preço': 'preco_unitario',
-            'Estoque disponível': 'estoque',
-            'Custo': 'custo'
+            'código (SKU)': 'sku',  # Ensure this matches your CSV column
+            'descrição': 'descricao',
+            'unidade': 'unidade',
+            'preço': 'preco',
+            'preço promocional': 'preco_promocional',
+            'estoque disponível': 'estoque_disponivel',
+            'custo': 'custo'
         },
-        'Clientes': {
-            'ID': 'id_original',
-            'Nome': 'nome',
-            'origem': 'origem',
-            'CEP': 'cep',
-            'CNPJ / CPF': 'cpf_cnpj',
-            'Celular': 'celular',
-            'Endereço': 'endereco',
-            'Tipo pessoa': 'tipo_pessoa'
+            'Clientes': {
+            'id': 'id',  # Mapeado ao campo primário
+            'nome': 'nome',
+            'fantasia': 'fantasia',
+            'endereço': 'endereco',
+            'número': 'numero',
+            'complemento': 'complemento',
+            'bairro': 'bairro',
+            'cep': 'cep',
+            'cidade': 'cidade',
+            'estado': 'estado',
+            'cnpj / cpf': 'cpf_cnpj',  # Normalized header
+            'celular': 'celular',
+            'fone': 'fone',
+            'tipo pessoa': 'tipo_pessoa',
+            'contribuinte': 'contribuinte',
+            'código de regime tributário': 'codigo_regime_tributario',
+            'limite de crédito': 'limite_credito'
         },
         'Vendas': {
-            'Número': 'numero_venda_original',
-            'origem': 'origem',
-            'Data da venda': 'data_compra',
-            'E-commerce': 'canal_venda',
-            'Situação da venda': 'situacao',
-        }
+            'número': 'numero',  # Campo primário
+            'data da venda': 'data_compra',
+            'e-commerce': 'canal_venda',
+            'situação da venda': 'situacao',
+            'loja': 'loja'
+        },
     }
 
     def add_arguments(self, parser):
@@ -83,12 +96,10 @@ class Command(BaseCommand):
             self.stdout.write(self.style.SUCCESS('Importação concluída com sucesso.'))
 
         except Exception as e:
-            self.handle_error(e, csv_file)
+            self.handle_error(e)
 
     def get_model_name_from_file(self, csv_file):
-        file_name = os.path.basename(csv_file)
-        model_name, _ = os.path.splitext(file_name)
-        return model_name
+        return os.path.splitext(os.path.basename(csv_file))[0]
 
     def get_model(self, model_name):
         try:
@@ -98,72 +109,86 @@ class Command(BaseCommand):
             return None
 
     def get_column_mapping(self, model):
-        return self.COLUMN_MAPPINGS.get(model.__name__, None)
+        return self.COLUMN_MAPPINGS.get(model.__name__)
 
     def load_csv(self, csv_file):
         try:
-            df = pd.read_csv(csv_file, encoding='utf-8', low_memory=False)
-            return df
+            return pd.read_csv(csv_file, encoding='utf-8', low_memory=False)
         except Exception as e:
             logger.error(f'Erro ao carregar CSV: {e}')
             raise
 
     def validate_csv_columns(self, df, mapping):
-        csv_columns = df.columns.tolist()
-        missing_cols = [csv_col for csv_col in mapping.keys() if csv_col not in csv_columns]
+    # Normalize CSV headers to lowercase and remove extra spaces
+        df.columns = df.columns.str.strip().str.lower()
+        normalized_mapping = {k.lower().strip(): v for k, v in mapping.items()}
+
+        missing_cols = [k for k in normalized_mapping if k not in df.columns]
+        extra_cols = [col for col in df.columns if col not in normalized_mapping]
+
         if missing_cols:
-            raise ValueError(f'Colunas faltando no CSV: {", ".join(missing_cols)}')
+            error_msg = f"Missing required columns: {', '.join(missing_cols)}"
+            logger.error(error_msg)
+            raise ValueError(error_msg)
+
+        if extra_cols:
+            logger.warning(f"Extra columns in CSV: {extra_cols}")
 
     def clean_consumidor_final(self, model):
-        """
-        Remove registros duplicados de 'Consumidor Final' e mantém um único com ID 1.
-        """
         if model.__name__ == 'Clientes':
             model.objects.filter(nome='Consumidor Final').delete()
 
     def get_existing_objects(self, model, df, mapping, model_name):
         unique_fields = self.UNIQUE_FIELDS.get(model_name, [])
         if not unique_fields:
+            logger.error(f"No unique fields defined for model '{model_name}'.")
             return {}
 
-        # Mapeia as colunas únicas do CSV para os campos do modelo
-        unique_mapping_keys = [self.get_key_from_value(mapping, field) for field in unique_fields]
-        filter_criteria = []
+        # Map unique fields to the CSV columns
+        unique_field_column = mapping.get(unique_fields[0])
+        if not unique_field_column:
+            logger.error(f"No mapping found for unique field '{unique_fields[0]}' in model '{model_name}'.")
+            return {}
 
-        for _, row in df.iterrows():
-            criteria = Q()
-            for field, key in zip(unique_fields, unique_mapping_keys):
-                criteria &= Q(**{field: row[key]})
-            filter_criteria.append(criteria)
+        if unique_field_column not in df.columns:
+            logger.error(f"Column '{unique_field_column}' not found in the CSV for model '{model_name}'.")
+            return {}
 
-        # Recupera objetos correspondentes
-        existing_objects = {}
-        if filter_criteria:
-            query = filter_criteria[0]
-            for criterion in filter_criteria[1:]:
-                query |= criterion
+        # Extract unique field values
+        unique_field_values = df[unique_field_column].dropna().unique()
+        if not unique_field_values.any():
+            logger.warning(f"No valid unique field values found for column '{unique_field_column}' in the CSV.")
+            return {}
 
-            for obj in model.objects.filter(query):
-                key = '|'.join([str(getattr(obj, field)).strip().lower() for field in unique_fields])
-                existing_objects[key] = obj
+        # Use __in lookup for filtering
+        filter_criteria = {f"{unique_fields[0]}__in": unique_field_values}
+        existing_objects = {
+            getattr(obj, unique_fields[0]): obj
+            for obj in model.objects.filter(**filter_criteria)
+        }
 
         return existing_objects
 
     def prepare_records(self, df, mapping, existing_objects, model, model_name):
         unique_fields = self.UNIQUE_FIELDS.get(model_name, [])
-        unique_mapping_keys = [self.get_key_from_value(mapping, field) for field in unique_fields]
+        if not unique_fields:
+            raise ValueError(f"No unique fields defined for model '{model_name}'.")
 
         new_records, updated_records = [], []
         seen_unique_values = set()
 
         for _, row in df.iterrows():
-            data = self.process_row(mapping, row, model_name)
+            data = self.process_row(mapping, row, model)
             if data is None:
                 continue
 
-            unique_values = tuple(data[field] for field in unique_fields)
-            standardized_unique = '|'.join([str(value).strip().lower() for value in unique_values])
+            # Create a unique identifier based on unique fields
+            unique_values = tuple(data.get(field, None) for field in unique_fields)
+            if None in unique_values:
+                logger.warning(f"Skipping row due to missing unique fields: {unique_fields}")
+                continue
 
+            standardized_unique = '|'.join([str(value).strip().lower() for value in unique_values])
             if standardized_unique in seen_unique_values:
                 continue
 
@@ -171,7 +196,6 @@ class Command(BaseCommand):
             existing_obj = existing_objects.get(standardized_unique)
 
             if existing_obj:
-                # Atualizar os campos do objeto existente
                 for field, value in data.items():
                     setattr(existing_obj, field, value)
                 updated_records.append(existing_obj)
@@ -180,55 +204,67 @@ class Command(BaseCommand):
 
         return new_records, updated_records
 
-
-    def process_row(self, mapping, row, model_name):
+    def process_row(self, mapping, row, model):
+        """
+        Process a single row of data from the CSV and clean it based on the model fields.
+        """
         data = {}
         for csv_col, model_field in mapping.items():
-            if csv_col in row:
-                raw_value = row[csv_col]
-                cleaned_value = self.clean_value(model_field, raw_value)
+            # Normalize the column name before accessing the row
+            normalized_csv_col = csv_col.lower().strip()
+            if normalized_csv_col in row:
+                raw_value = row[normalized_csv_col]
+                cleaned_value = self.clean_value(model_field, model, raw_value)
+                
+                # Especial para o campo canal_venda no modelo Vendas
+                if model.__name__ == 'Vendas' and model_field == 'canal_venda':
+                    # Preencher com 'Pdv' se estiver vazio ou nulo
+                    if not cleaned_value:
+                        cleaned_value = 'Pdv'
+                
                 data[model_field] = cleaned_value
         return data
 
-    def clean_value(self, field, value):
+
+
+    def clean_value(self, field_name, model, value):
         """
-        Limpa e padroniza o valor com base no tipo de campo.
+        Clean and convert a value to match the type of a Django model field.
         """
         if pd.isna(value) or value in (None, '', '-'):
-            if field == 'canal_venda':
-                return 'Pdv'
-            return None  # Tratar como nulo
+            return None
 
-        # Para strings, remover espaços em excesso
-        if isinstance(value, str):
-            value = value.strip()
+        # Get the field type from the model
+        field = model._meta.get_field(field_name)
 
-        # Para números (int, float), converter para string se necessário
-        if isinstance(value, (int, float)):
-            value = str(value)
-
+        # Handle different field types
         try:
-            if field in {'preco_unitario', 'estoque', 'custo'}:
-                # Remover caracteres não numéricos e converter para Decimal
-                value = re.sub(r'[^\d.,-]', '', value)
+            if isinstance(field, models.DecimalField):
+                # Handle commas and convert to Decimal
+                value = re.sub(r'[^\d.,-]', '', str(value))
                 return Decimal(value.replace(',', '.'))
-
-            if field == 'data_compra':
-                # Tentar converter a data em múltiplos formatos
+            elif isinstance(field, models.DateField):
+                # Parse date in multiple formats
                 for fmt in ('%Y-%m-%d', '%d/%m/%Y', '%m/%d/%Y'):
                     try:
                         return datetime.strptime(value, fmt).date()
                     except ValueError:
                         continue
-                logger.error(f'Formato de data inválido para o campo "{field}": {value}')
-                return None  # Retorna None se nenhum formato corresponder
-
-            # Substituir valores vazios ou nulos em 'canal_venda' por 'Pdv'
-            if field == 'canal_venda' and (not value or value.lower() == 'null'):
-                return 'Pdv'
+                raise ValueError(f"Invalid date format for field '{field_name}': {value}")
+            elif isinstance(field, models.BooleanField):
+                # Normalize boolean values
+                return str(value).lower() in ('true', '1', 'yes', 'sim')
+            elif isinstance(field, models.IntegerField):
+                return int(value)
+            elif isinstance(field, models.CharField):
+                return str(value).strip()
+            elif isinstance(field, models.EmailField):
+                # Validate email format
+                return str(value).strip()
+            # Add more field types as needed
             return value
-        except (InvalidOperation, ValueError, TypeError):
-            logger.error(f'Erro ao limpar o campo "{field}" com valor "{value}"')
+        except (ValueError, InvalidOperation, TypeError) as e:
+            logger.error(f"Error converting value '{value}' for field '{field_name}': {e}")
             return None
 
     def bulk_create_new_records(self, model, new_records):
@@ -241,21 +277,22 @@ class Command(BaseCommand):
 
     def bulk_update_existing_records(self, model, updated_records):
         if updated_records:
-            # Determina os campos a serem atualizados
-            fields_to_update = [
-                field.name
-                for field in model._meta.fields
-                if field.name != model._meta.pk.name  # Não atualiza a PK
-            ]
+            fields_to_update = [field.name for field in model._meta.fields if field.name != model._meta.pk.name]
             try:
                 model.objects.bulk_update(updated_records, fields=fields_to_update)
             except IntegrityError as e:
                 logger.error(f'Erro ao atualizar registros: {e}')
                 raise
 
-    def handle_error(self, error, csv_file):
-        logger.error(f'Ocorreu um erro: {error}')
-        self.stdout.write(self.style.ERROR(f'Ocorreu um erro: {error}'))
+    def handle_error(self, error):
+        # Usa traceback.format_exception para obter uma versão detalhada do erro
+        error_details = traceback.format_exception(type(error), error, error.__traceback__)
+        
+        # Limita a 2 primeiras linhas
+        error_lines = error_details[:19]
+        
+        # Exibe as duas primeiras linhas
+        self.stdout.write(self.style.ERROR(f'Ocorreu um erro: {"\n".join(error_lines)}'))
 
     def get_key_from_value(self, mapping, search_value):
         return next((key for key, value in mapping.items() if value == search_value), None)

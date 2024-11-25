@@ -174,6 +174,7 @@ from decouple import config
 TINY_OLIST_USERNAME_IMP = config('TINY_OLIST_USERNAME_IMP')
 TINY_OLIST_USERNAME_SERVI = config('TINY_OLIST_USERNAME_SERVI')
 TINY_OLIST_PASSWORD = config('TINY_OLIST_PASSWORD')
+ADMINPASS = config('SUPERUSER_PASS')
 
 from datetime import timedelta
 

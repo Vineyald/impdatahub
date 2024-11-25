@@ -6,47 +6,51 @@ from django.db import transaction, IntegrityError
 from decimal import Decimal
 from datetime import datetime
 import re
-from django.db.models import Q
+
 
 class Command(BaseCommand):
     help = 'Importa dados de um arquivo CSV para o modelo ItemVenda'
 
-    # Mantemos os mesmos mapeamentos de colunas e campos obrigatórios
-    UNIQUE_FIELDS = {'ItemVenda': ['venda', 'produto', 'origem']}
+    UNIQUE_FIELDS = {'ItemVenda': ['venda', 'produto', 'loja']}
     REQUIRED_FIELDS = {'ItemVenda': ['venda', 'produto', 'quantidade_produto', 'valor_total', 'valor_desconto', 'frete',
                                      'preco_final']}
     COLUMN_MAPPINGS = {
         'ItemVenda': {
             'número': 'venda',
             'nome do cliente': 'cliente',
-            'vendedor': 'nome',
+            'vendedor': 'vendedor',
             'código (sku)': 'produto',
             'quantidade de produtos': 'quantidade_produto',
             'preço total': 'valor_total',
             'preço unitário': 'valor_desconto',
             'frete pago pelo cliente': 'frete',
             'valor total da venda': 'preco_final',
-            'origem': 'origem',
+            'loja': 'loja',
         }
     }
 
     def add_arguments(self, parser):
-        parser.add_argument('csv_file', type=str, help='Caminho para o arquivo CSV a ser importado')
+        parser.add_argument('csv_file', type=str, help='Caminho para o arquivo CSV de ItemVenda')
+        parser.add_argument('clientes_csv', type=str, help='Caminho para o arquivo CSV de Clientes')
 
     def handle(self, *args, **kwargs):
         csv_file = kwargs['csv_file']
+        clientes_csv = kwargs['clientes_csv']
         model = self.get_model('ItemVenda')
         mapping = self.get_column_mapping(model)
 
         if not mapping:
             return
 
-        df = self.load_csv(csv_file)
-        self.validate_csv_columns(df, mapping)
+        # Carregar os dados dos arquivos CSV
+        df_itemvenda = self.load_csv(csv_file)
+        df_clientes = self.load_csv(clientes_csv)
+
+        self.validate_csv_columns(df_itemvenda, mapping)
 
         with transaction.atomic():
-            related_caches = self.prepare_related_caches(df, mapping)
-            new_records, updated_records = self.prepare_records(df, mapping, related_caches, model)
+            related_caches = self.prepare_related_caches(df_itemvenda, df_clientes, mapping)
+            new_records, updated_records = self.prepare_records(df_itemvenda, mapping, related_caches, model)
 
             # Bulk create and update the records
             self.bulk_create_new_records(model, new_records)
@@ -67,73 +71,101 @@ class Command(BaseCommand):
             df.columns = [col.lower() for col in df.columns]  # Padronizar colunas
             return df
         except Exception as e:
-            raise
+            raise ValueError(f'Erro ao carregar o arquivo CSV: {e}')
 
     def validate_csv_columns(self, df, mapping):
         missing_cols = [col for col in mapping if col not in df.columns]
         if missing_cols:
             raise ValueError(f'Colunas faltando no CSV: {", ".join(missing_cols)}')
 
-    def prepare_related_caches(self, df, mapping):
-        # Pré-carregar caches de clientes, vendas, vendedores e produtos
+    def prepare_related_caches(self, df_itemvenda, df_clientes, mapping):
+        # Pré-carregar caches de vendas, vendedores e produtos
         related_models = {
-            'Clientes': apps.get_model('coremodels', 'Clientes'),
             'Vendas': apps.get_model('coremodels', 'Vendas'),
             'Vendedores': apps.get_model('coremodels', 'Vendedores'),
             'Produtos': apps.get_model('coremodels', 'Produtos'),
         }
 
-        caches = {
-            'clientes_cache': self.load_cache(related_models['Clientes'], 'nome', 'origem'),
-            'vendas_cache': self.load_cache(related_models['Vendas'], 'numero_venda_original', 'origem'),
-            'vendedores_cache': self.load_cache(related_models['Vendedores'], 'nome'),
-            'produtos_cache': self.load_cache(related_models['Produtos'], 'codigo'),
+        vendas_cache = self.load_cache(related_models['Vendas'], 'numero', 'loja')
+        vendedores_cache = self.load_cache(related_models['Vendedores'], 'nome')
+        produtos_cache = self.load_cache(related_models['Produtos'], 'sku')
+
+        # Criar cache de clientes com base no CSV de clientes
+        clientes_cache = self.create_clientes_cache(df_clientes)
+
+        return {
+            'clientes_cache': clientes_cache,
+            'vendas_cache': vendas_cache,
+            'vendedores_cache': vendedores_cache,
+            'produtos_cache': produtos_cache,
         }
 
-        return caches
+    def create_clientes_cache(self, df_clientes):
+        """Cria o cache de clientes a partir do CSV de clientes."""
+        clientes_cache = {}
+        for _, row in df_clientes.iterrows():
+            cliente_nome = str(row['nome']).strip().lower()
+            cliente_id = row['id']
+            clientes_cache[cliente_nome] = cliente_id
+        return clientes_cache
 
     def load_cache(self, model, *fields):
-        """Carrega o cache com base nos campos fornecidos."""
+        """Carrega o cache com base nos campos fornecidos, com verificação de tipo."""
         queryset = model.objects.all()
-        if len(fields) == 2:
-            return {f"{getattr(obj, fields[0])}|{getattr(obj, fields[1])}".lower(): obj for obj in queryset}
-        else:
-            return {getattr(obj, fields[0]): obj for obj in queryset}
+        cache = {}
+
+        for obj in queryset:
+            key_parts = []
+            for field in fields:
+                value = getattr(obj, field)
+                if isinstance(value, str):
+                    key_parts.append(value.strip().lower())
+                else:
+                    key_parts.append(str(value).lower())  # Converter não-strings para string
+
+            key = "|".join(key_parts)
+            cache[key] = obj
+
+        return cache
+
 
     def prepare_records(self, df, mapping, caches, model):
         new_records = []
         updated_records = []
 
         for index, row in df.iterrows():
-            venda_key = f"{str(row['número']).strip().lower()}|{str(row['origem']).strip().lower()}"
-            cliente_key = f"{str(row['nome do cliente']).strip().lower()}|{str(row['origem']).strip().lower()}"
-            produto_key = str(row['código (sku)']).strip()
-            vendedor_key = str(
-                row['vendedor']).strip().capitalize()  # Certifique-se de que o nome do vendedor esteja em minúsculas
+            cliente_nome = str(row['nome do cliente']).strip().lower()
+            cliente_id = caches['clientes_cache'].get(cliente_nome)
 
-            # Tentar obter os objetos do cache
+            venda_key = f"{str(row['número']).strip().lower()}|{str(row['loja']).strip().lower()}"
+            produto_key = str(row['código (sku)']).strip().lower()
+            vendedor_key = str(row['vendedor']).strip().lower()  # Normalização
+
+            # Buscar objetos do cache
             venda = caches['vendas_cache'].get(venda_key)
-            cliente = caches['clientes_cache'].get(cliente_key)
             produto = caches['produtos_cache'].get(produto_key)
-            vendedor = caches['vendedores_cache'].get(vendedor_key)  # Buscar o vendedor pelo nome no cache
+            vendedor = caches['vendedores_cache'].get(vendedor_key)
 
-            if not venda or not cliente or not produto:
-                continue  # Pular registros incompletos
+            if not vendedor:
+                self.stdout.write(f"[ERRO] Vendedor não encontrado: {row['vendedor']}. Chaves disponíveis: {list(caches['vendedores_cache'].keys())}")
+
+            if not venda or not cliente_id or not produto or not vendedor:
+                continue  # Ignorar registros incompletos
 
             data = {
                 'venda': venda,
-                'cliente': cliente,
-                'vendedor': vendedor,  # Atribuir o vendedor ao registro
+                'cliente_id': cliente_id,
+                'vendedor': vendedor,
                 'produto': produto,
                 'quantidade_produto': row['quantidade de produtos'],
                 'valor_total': self.clean_numeric(row['preço total']),
                 'valor_desconto': self.clean_numeric(row['preço unitário']),
                 'frete': self.clean_numeric(row['frete pago pelo cliente']),
                 'preco_final': self.clean_numeric(row['valor total da venda']),
-                'origem': row['origem'],
+                'loja': row['loja'],
             }
 
-            unique_key = f'{venda.id}_{produto.codigo}'
+            unique_key = f'{venda.id}_{produto.sku}'
             if unique_key in caches.get('existing_objects', {}):
                 existing_obj = caches['existing_objects'][unique_key]
                 for field, value in data.items():
