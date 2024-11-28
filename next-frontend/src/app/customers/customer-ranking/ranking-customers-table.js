@@ -13,24 +13,24 @@ import {
   Input,
 } from "@nextui-org/react";
 import Link from 'next/link';
-import { getKeyValue } from '@nextui-org/react';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
 const RankingClientsTable = () => {
-  const [data, setData] = useState({ Geral: [], Servi: [], Imp: [] });
+  const [data, setData] = useState([]);
   const [startDate, setStartDate] = useState('');
   const [endDate, setEndDate] = useState('');
   const [sortDescriptor, setSortDescriptor] = useState({ column: 'total_gasto', direction: 'descending' });
 
+  // Fetch data from API
   const fetchRankingData = () => {
-    axios.get(`${API_URL}/clientes_ranking/`, { params: { start_date: startDate, end_date: endDate } })
+    axios
+      .get(`${API_URL}/clientes_ranking/`, {
+        params: { start_date: startDate, end_date: endDate },
+      })
       .then(response => {
-        setData({
-          Geral: response.data.Geral || [],
-          Servi: response.data.Servi || [],
-          Imp: response.data.Imp || [],
-        });
+        console.log('Resposta da API:', response.data);
+        setData(response.data || []); // Set the full array response
       })
       .catch(error => {
         console.error('Erro ao buscar os dados da API', error);
@@ -41,39 +41,10 @@ const RankingClientsTable = () => {
     fetchRankingData();
   }, [startDate, endDate]);
 
-  const sortedGeral = useMemo(() => {
-    const allClients = [...data.Geral];
-    return allClients.sort((a, b) => {
-      const first = a[sortDescriptor.column];
-      const second = b[sortDescriptor.column];
-      let cmp = first < second ? -1 : 1;
-
-      if (sortDescriptor.direction === "descending") {
-        cmp *= -1;
-      }
-
-      return cmp;
-    });
-  }, [data, sortDescriptor]);
-
-  const sortedImp = useMemo(() => {
-    const allClients = [...data.Imp];
-    return allClients.sort((a, b) => {
-      const first = a[sortDescriptor.column];
-      const second = b[sortDescriptor.column];
-      let cmp = first < second ? -1 : 1;
-
-      if (sortDescriptor.direction === "descending") {
-        cmp *= -1;
-      }
-
-      return cmp;
-    });
-  }, [data, sortDescriptor]);
-
-  const sortedServi = useMemo(() => {
-    const allClients = [...data.Servi];
-    return allClients.sort((a, b) => {
+  // Sort the data based on the selected descriptor
+  const sortedData = useMemo(() => {
+    const sorted = [...data];
+    return sorted.sort((a, b) => {
       const first = a[sortDescriptor.column];
       const second = b[sortDescriptor.column];
       let cmp = first < second ? -1 : 1;
@@ -99,20 +70,20 @@ const RankingClientsTable = () => {
   };
 
   const renderCell = useCallback((client, columnKey) => {
-    const cellValue = getKeyValue(client, columnKey);
-  
-    // Verifica se a coluna é 'total_gasto' para formatar em BRL
+    const cellValue = client[columnKey];
+
+    // Format "total_gasto" column
     if (columnKey === "total_gasto") {
       return (
         <span>
           {new Intl.NumberFormat("pt-BR", {
             style: "currency",
-            currency: "BRL"
+            currency: "BRL",
           }).format(cellValue || 0)}
         </span>
       );
     }
-  
+
     return <span>{capitalizeText(cellValue)}</span>;
   }, []);
 
@@ -145,7 +116,7 @@ const RankingClientsTable = () => {
           <p className="fs-2 fw-bold text-capitalize">Ranking geral</p>
         </div>
         <Table
-          aria-label="Top 20 clientes geral (Servi e Império)"
+          aria-label="Top 20 clientes geral"
           sortDescriptor={sortDescriptor}
           onSortChange={handleSortChange}
           classNames={{
@@ -155,21 +126,21 @@ const RankingClientsTable = () => {
         >
           <TableHeader>
             <TableColumn key="nome" allowsSorting>
-                Nome
+              Nome
             </TableColumn>
-            <TableColumn key="ultima_compra_imp" allowsSorting>
-                Última Comp. Imp
-            </TableColumn>
-            <TableColumn key="ultima_compra_servi" allowsSorting>
-                Última Comp. Servi
+            <TableColumn key="ultima_compra" allowsSorting>
+              Última Compra
             </TableColumn>
             <TableColumn key="total_gasto" allowsSorting>
-                Total Gasto
+              Total Gasto
+            </TableColumn>
+            <TableColumn key="numero_compras" allowsSorting>
+              Nº de Compras
             </TableColumn>
           </TableHeader>
-          <TableBody items={sortedGeral}>
+          <TableBody items={sortedData}>
             {(client) => (
-              <TableRow key={`${client.nome}-${client.origem}`}>
+              <TableRow key={client.id}>
                 {(columnKey) => (
                   <TableCell>
                     <Link href={`/customers/customer-profile/${client.id}`}>
@@ -181,72 +152,6 @@ const RankingClientsTable = () => {
             )}
           </TableBody>
         </Table>
-      </div>
-
-      {/* Tabelas Imp e Servi */}
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <div>
-            <p className="fs-2 fw-bold text-capitalize">Ranking Império</p>
-          </div>
-          <Table aria-label="Ranking Império" className="custom_table">
-            <TableHeader>
-                <TableColumn key="nome" allowsSorting>
-                    Nome
-                </TableColumn>
-                <TableColumn key="ultima_compra" allowsSorting>
-                    Última Comp.
-                </TableColumn>
-                <TableColumn key="total_gasto" allowsSorting>
-                    Total Gasto
-                </TableColumn>
-            </TableHeader>
-            <TableBody items={sortedImp}>
-              {(client) => (
-                <TableRow key={client.id}>
-                  {(columnKey) => (
-                    <TableCell>
-                      <Link href={`/customers/customer-profile/${client.id}`}>
-                        {renderCell(client, columnKey)}
-                      </Link>
-                    </TableCell>
-                  )}
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
-        <div>
-          <div>
-            <p className="fs-2 fw-bold text-capitalize">Ranking Servi</p>
-          </div>
-          <Table aria-label="Ranking Servi" className="custom_table">
-            <TableHeader>
-                <TableColumn key="nome" allowsSorting>
-                    Nome
-                </TableColumn>
-                <TableColumn key="ultima_compra" allowsSorting>
-                    Última Comp.
-                </TableColumn>
-                <TableColumn key="total_gasto" allowsSorting>
-                    Total Gasto
-                </TableColumn>
-            </TableHeader>
-            <TableBody items={sortedServi}>
-              {(client) => (
-                <TableRow key={client.id}>
-                  {(columnKey) => (
-                    <TableCell>
-                      <Link href={`/customers/customer-profile/${client.id}`}>
-                        {renderCell(client, columnKey)}
-                      </Link>
-                    </TableCell>
-                  )}
-                </TableRow>
-              )}
-            </TableBody>
-          </Table>
-        </div>
       </div>
     </div>
   );

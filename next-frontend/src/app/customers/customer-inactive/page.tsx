@@ -11,18 +11,34 @@ import {
 import dynamic from 'next/dynamic';
 
 interface ClientInfo {
-  id_original: string;
-  origem: string;
+  id: number;
   nome: string;
-  cep: string;
-  cpf_cnpj: string;
+  fantasia: string;
   tipo_pessoa: string;
-  ultima_compra: string;
+  cpf_cnpj: string;
+  email: string;
+  celular: string;
+  fone: string;
+  cep: string;
+  rota: string;
+  endereco: string;
+  numero: string;
+  complemento: string;
+  bairro: string;
+  cidade: string;
+  estado: string;
+  situacao: string;
+  vendedor: string;
+  contribuinte: string;
+  codigo_regime_tributario: string;
+  limite_credito: number;
+  ultima_compra: string | null;
 }
 
 const PurchasesBarChart = dynamic(() => import('./charts/purchases-bar-chart'), { ssr: false });
 const LastPurchaseLineChart = dynamic(() => import('./charts/last-purchase-line-chart'), { ssr: false });
 const InactiveClientsChoroplethMap = dynamic(() => import('./charts/heatmap-chart'), { ssr: false });
+const ValueDiscountBarChart = dynamic(() => import('./charts/value-discount-bar-chart'), { ssr: false });
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -54,7 +70,6 @@ export default function InactiveClients() {
     fetchData();
   }, []);
   
-
   if (!data) {
     return (
       <div className='px-4'>
@@ -115,18 +130,22 @@ export default function InactiveClients() {
       <Spacer y={5} />
       {data && (
         <>
-          <div className="grid gap-6 md:grid-cols-4 lg:grid-cols-4 2xl:grid-cols-9 md:max-w-5xl 2xl:max-w-screen-2xl mx-auto">
+          <div className="grid gap-6 md:grid-cols-4 lg:grid-cols-4 2xl:grid-cols-9 md:max-w-5xl 2xl:max-w-full mx-auto">
             <Card className="p-4 col-span-4 md:col-span-4 2xl:col-span-9">
               <PurchasesBarChart />
+            </Card>
+
+            <Card className="col-span-4 md:col-span-2 lg:col-span-2 p-4 2xl:col-span-7">
+              <ValueDiscountBarChart />
+            </Card>
+
+            <Card className="p-4 col-span-4 md:col-span-2 2xl:col-span-2">
+              <LastPurchaseLineChart />
             </Card>
 
             {/*<Card className="p-4 col-span-4 md:col-span-2 2xl:col-span-3">
               <PurchasesBarChart />  
             </Card>*/}
-
-            <Card className="p-4 col-span-4 md:col-span-2 2xl:col-span-4">
-              <LastPurchaseLineChart />
-            </Card>
 
             {/*<Card className="col-span-4 md:col-span-4 lg:col-span-4 p-4 2xl:col-span-3">
               <OriginPieChart />
@@ -138,13 +157,9 @@ export default function InactiveClients() {
 
             <Card className="col-span-4 md:col-span-2 lg:col-span-2 p-4 2xl:col-span-3">
               <PriceScatterChart />
-            </Card>
+            </Card> */}
 
-            <Card className="col-span-4 md:col-span-2 lg:col-span-2 p-4 2xl:col-span-3">
-              <ValueDiscountBarChart />
-            </Card>*/}
-
-            <Card className="col-span-4 md:col-span-4 lg:col-span-4 p-4 2xl:col-span-9">
+            <Card className="col-span-4 md:col-span-4 lg:col-span-4 p-4 2xl:col-span-8">
               <InactiveClientsChoroplethMap />
             </Card> 
           </div>

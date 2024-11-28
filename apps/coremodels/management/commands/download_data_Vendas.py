@@ -4,6 +4,7 @@ from django.core.management.base import BaseCommand, CommandError
 from selenium import webdriver
 from selenium.webdriver.common.by import By
 from selenium.webdriver.chrome.service import Service
+from selenium.webdriver.support.expected_conditions import staleness_of, invisibility_of_element_located, presence_of_element_located
 from selenium.webdriver.chrome.options import Options
 from selenium.webdriver.support.ui import WebDriverWait
 from selenium.webdriver.support import expected_conditions as EC
@@ -95,29 +96,24 @@ class Command(BaseCommand):
         self.stdout.write(self.style.SUCCESS("Todos os downloads foram processados."))
         logger.info("Todos os downloads foram processados.")
 
-    def download_reports(self, account, link):
-
+    def download_reports(self, account: dict, link: str) -> None:
         username = account['username']
         password = account['password']
         download_dir = account['download_dir']
 
-        # Verificação das variáveis
+        # Verify configuration variables
         if not username or not password:
-            self.stderr.write(self.style.ERROR(
-                "Variáveis de configuração TINY_OLIST_USERNAME, TINY_OLIST_PASSWORD ou CHROMEDRIVER_PATH não estão definidas."
-            ))
-            logger.error(
-                "Variáveis de configuração TINY_OLIST_USERNAME, TINY_OLIST_PASSWORD ou CHROMEDRIVER_PATH não estão definidas.")
+            self.stderr.write(self.style.ERROR("TINY_OLIST_USERNAME or TINY_OLIST_PASSWORD not set."))
             return
 
-        # Criar diretório de download se não existir
+        # Create download directory if it doesn't exist
         if not os.path.exists(download_dir):
             os.makedirs(download_dir)
-            logger.info(f"Diretório de download criado em: {download_dir}")
+            logger.info(f"Download directory created at {download_dir}")
 
-        # Configurar opções do Chrome
+        # Configure Chrome options
         chrome_options = Options()
-        #chrome_options.add_argument('--headless=new')  # Executa o Chrome em modo headless (descomente para rodar com interface)
+        chrome_options.add_argument('--headless=new')  # Run Chrome headless
         chrome_options.add_argument('--no-sandbox')
         chrome_options.add_argument('--disable-dev-shm-usage')
         prefs = {
@@ -128,76 +124,60 @@ class Command(BaseCommand):
         }
         chrome_options.add_experimental_option("prefs", prefs)
 
-        # Inicializar o WebDriver com webdriver-manager
+        # Initialize WebDriver with webdriver-manager
         try:
-            service = Service(ChromeDriverManager().install())  # Gerenciado automaticamente
+            service = Service(ChromeDriverManager().install())  # Automatically managed
             driver = webdriver.Chrome(service=service, options=chrome_options)
-            logger.info("WebDriver inicializado com sucesso usando webdriver-manager.")
+            logger.info("WebDriver initialized with webdriver-manager.")
         except WebDriverException as e:
-            self.stderr.write(self.style.ERROR(f"Erro ao inicializar o WebDriver: {e}"))
-            logger.error(f"Erro ao inicializar o WebDriver: {e}")
+            self.stderr.write(self.style.ERROR(f"Error initializing WebDriver: {e}"))
             return
 
-        wait = WebDriverWait(driver, 60)  # Espera máxima de 20 segundos
+        wait = WebDriverWait(driver, 20)  # Maximum wait time
 
         try:
+            # Login to Olist Tiny
             driver.get('https://erp.tiny.com.br/login/')
-
-            # Esperar o campo de username estar presente
             username_field = wait.until(EC.presence_of_element_located((By.NAME, 'username')))
-
-            # Preencher o campo de username
             username_field.clear()
             username_field.send_keys(username)
 
-            # Esperar o campo de senha
             password_field = wait.until(EC.presence_of_element_located((By.NAME, 'password')))
-
-            # Preencher o campo de senha
             password_field.clear()
             password_field.send_keys(password)
 
-            # Clicar no botão de login
-            login_button = wait.until(
-                EC.element_to_be_clickable((By.XPATH, '//button[contains(text(), "entrar no Olist Tiny")]'))
-            )
-
+            login_button = wait.until(EC.element_to_be_clickable((By.XPATH, '//button[contains(text(), "entrar no Olist Tiny")]')))
             login_button.click()
 
-            time.sleep(6)  # Aguardar resposta do login
+            time.sleep(6)  # Wait for login response
 
+            # Check if login was successful
             try:
-                # Aguarda até que o modal esteja presente
                 WebDriverWait(driver, 15).until(
                     EC.presence_of_element_located((By.CLASS_NAME, "modal-dialog"))
                 )
-
-                # Verifica se o texto do modal corresponde à mensagem esperada
                 modal_title = driver.find_element(By.CLASS_NAME, "modal-title").text
                 if "Este usuário já está logado em outro dispositivo" in modal_title:
-                    # Clica no botão "login" na modal
+                    # Click on the "login" button in the modal
                     login_modal_button = driver.find_element(By.XPATH, "//button[contains(text(), 'login')]")
                     login_modal_button.click()
                 else:
-                    logger.info("Modal com mensagem de login múltiplo não encontrado.")
+                    logger.info("Modal with multiple login message not found.")
             except NoSuchElementException:
-                logger.info("Nenhum modal detectado.")
+                logger.info("No modal detected.")
             except TimeoutException:
-                logger.info("Nenhum modal detectado dentro do tempo esperado.")
+                logger.info("No modal detected within the expected time.")
             except Exception as e:
-                logger.error(f"Erro ao tentar realizar o login em nova sessão para {username}: {e}")
-                self.stderr.write(
-                    self.style.ERROR(f"Erro ao tentar realizar o login em nova sessão para {username}: {e}"))
+                logger.error(f"Error logging in to Olist Tiny for {username}: {e}")
+                self.stderr.write(self.style.ERROR(f"Error logging in to Olist Tiny for {username}: {e}"))
 
-            # Verificar se o login foi bem-sucedido
-            time.sleep(5)  # Aguardar redirecionamento
-
-            # Acessar a URL específica para a conta
+            # Navigate to the specific URL for the account
+            time.sleep(5)
             driver.get(link)
 
-            # Agora, implementar as interações conforme solicitado
+            # Interact with the page as requested
 
-            # 1. Clicar no botão "Últimos 7 dias" para abrir o menu
+            # 1. Click on the "Últimos 7 dias" button to open the menu
             try:
                 ultimos_7_dias_button = wait.until(
                     EC.element_to_be_clickable(
@@ -206,11 +186,11 @@ class Command(BaseCommand):
                 )
                 ultimos_7_dias_button.click()
             except TimeoutException:
-                logger.error("Botão 'Últimos 7 dias' não encontrado ou não clicável.")
-                self.stderr.write(self.style.ERROR("Botão 'Últimos 7 dias' não encontrado ou não clicável."))
+                logger.error("Button 'Últimos 7 dias' not found or not clickable.")
+                self.stderr.write(self.style.ERROR("Button 'Últimos 7 dias' not found or not clickable."))
                 return
 
-            # 2. Selecionar o item "Período"
+            # 2. Select the "Período" item
             try:
                 periodo_button = wait.until(
                     EC.element_to_be_clickable(
@@ -219,13 +199,13 @@ class Command(BaseCommand):
                 )
                 periodo_button.click()
             except TimeoutException:
-                logger.error("Botão 'Período' não encontrado ou não clicável.")
-                self.stderr.write(self.style.ERROR("Botão 'Período' não encontrado ou não clicável."))
+                logger.error("Button 'Período' not found or not clickable.")
+                self.stderr.write(self.style.ERROR("Button 'Período' not found or not clickable."))
                 return
 
-            # 3. Preencher as datas
+            # 3. Fill in the dates
             try:
-                # Definir a data inicial
+                # Fill in the start date
                 data_inicial_input = wait.until(
                     EC.presence_of_element_located(
                         (By.XPATH, '//div[@class="tab-search-periodo"]//input[@class="form-control hasDatepicker"][1]')
@@ -235,13 +215,10 @@ class Command(BaseCommand):
                 data_inicial_input.send_keys("01/01/2021")
 
             except TimeoutException:
-                self.stderr.write(self.style.ERROR("Campos de data não encontrados."))
-                return
-            except Exception as e:
-                self.stderr.write(self.style.ERROR(f"Erro ao preencher as datas: {e}"))
+                self.stderr.write(self.style.ERROR("Date fields not found."))
                 return
 
-            # 4. Clicar no botão "Aplicar"
+            # 4. Click on the "Aplicar" button
             try:
                 aplicar_button = wait.until(
                     EC.element_to_be_clickable(
@@ -250,71 +227,94 @@ class Command(BaseCommand):
                 )
                 aplicar_button.click()
             except TimeoutException:
-                logger.error("Botão 'Aplicar' não encontrado ou não clicável.")
-                self.stderr.write(self.style.ERROR("Botão 'Aplicar' não encontrado ou não clicável."))
+                logger.error("Button 'Aplicar' not found or not clickable.")
+                self.stderr.write(self.style.ERROR("Button 'Aplicar' not found or not clickable."))
                 return
 
-            # 6. Clicar no botão de download na página
-            self.stdout.write("Clicando no botão de download do relatório...")
+            # 6. Click on the "download" button
             try:
-                self.stderr.write(f'Clicando em download para {account["type"]}')
-                time.sleep(20)
+                time.sleep(15)
                 btn_download = wait.until(
                     EC.element_to_be_clickable(
                         (By.XPATH, '//button[@class="btn btn-default" and contains(.,"download")]')
                     )
                 )
                 btn_download.click()
-                self.stderr.write(f'Botão clicado para {account["type"]}')
             except TimeoutException:
-                self.stderr.write(self.style.ERROR("Botão de download do relatório não encontrado ou não clicável."))
-                return
+                logger.error("Button 'download' not found or not clickable.")
 
-            # 7. Clicar no botão "processar outro arquivo"
-            self.stdout.write("Clicando no botão 'processar outro arquivo'...")
             try:
-                self.stderr.write(f'Clicando em processar para {account["type"]}')
-                processar_outro_button = wait.until(
-                    EC.element_to_be_clickable(
-                        (By.XPATH, '//button[contains(@class, "btn-ghost") and contains(.,"processar outro arquivo")]')
-                    )
-                )
-                processar_outro_button.click()
-                logger.info("Botão 'processar outro arquivo' clicado.")
-            except TimeoutException:
-                logger.error("Botão 'processar outro arquivo' não encontrado ou não clicável.")
-                self.stderr.write(self.style.ERROR(f"Botão 'processar outro arquivo' não encontrado ou não clicável para {account["type"]}."))
-                return
+                logger.info(f"Iniciando processamento para a conta: {account['type']}.")
+                
+                # Verifica a presença do loadbar e aguarda sua remoção
+                skip_process = False
+                try:
+                    logger.info("Verificando presença da barra de progresso...")
+                    time.sleep(5)
+                    loadbar = wait.until(wait.until_not(EC.visibility_of_element_located(
+                        (By.CSS_SELECTOR, '.card-body-space-progress')
+                    )))
+                    logger.info("Barra de progresso visível. Aguardando remoção...")
 
-            # 8. Clicar em "Continuar" na aba aberta
-            self.stdout.write("Clicando no botão 'Continuar'...")
-            try:
-                continuar_button = WebDriverWait(driver, 40).until(
-                    EC.element_to_be_clickable(
-                        (By.XPATH, '//div[@class="modal-footer"]//button[contains(text(), "continuar")]')
-                    )
-                )
-                continuar_button.click()
-                logger.info("Botão 'Continuar' clicado.")
-            except TimeoutException:
-                logger.error("Botão 'Continuar' não encontrado ou não clicável.")
-                self.stderr.write(self.style.ERROR("Botão 'Continuar' não encontrado ou não clicável."))
-                return
+                    # Aguarda a barra desaparecer (ou timeout)
+                    wait.until(staleness_of(loadbar))
+                    logger.info("Barra de progresso removida.")
+                    skip_process = True
+                except TimeoutException:
+                    logger.info("Barra de progresso não detectada ou não removida dentro do tempo limite. Prosseguindo.")
+                except Exception as e:
+                    logger.error(f"Erro inesperado ao verificar a barra de progresso: {e}")
+                    skip_process = False  # Continua mesmo com erro
 
-            time.sleep(60)
+                # Tenta clicar no botão "Processar Outro Arquivo" caso necessário
+                time.sleep(5)
+                if not skip_process:
+                    try:
+                        logger.info(f"Tentando clicar no botão 'Processar Outro Arquivo' para a conta {account['type']}...")
+                        processar_outro_button = wait.until(
+                            EC.element_to_be_clickable(
+                                (By.XPATH, '//button[contains(@class, "btn-ghost") and contains(.,"processar outro arquivo")]')
+                            )
+                        )
+                        processar_outro_button.click()
+                        logger.info(f"Botão 'Processar Outro Arquivo' clicado para a conta {account['type']}.")
+                    except TimeoutException:
+                        logger.info("Botão 'Processar Outro Arquivo' não encontrado ou não clicável. Tentando próximo passo.")
+                    except Exception as e:
+                        logger.error(f"Erro inesperado ao clicar no botão 'Processar Outro Arquivo': {e}")
 
-            # 9. Aguardar a barra de carregamento terminar
-            self.stdout.write("Aguardando a conclusão da barra de carregamento...")
-            try:
-                self.wait_for_loading_bar(driver)
-                logger.info("Barra de carregamento concluída.")
+                # Tenta clicar no botão "Continuar" caso "Processar Outro Arquivo" não tenha sido clicado
+                time.sleep(5)
+                if not skip_process:
+                    try:
+                        logger.info(f"Tentando clicar no botão 'Continuar' para a conta {account['type']}...")
+                        continuar_button = wait.until(
+                            EC.element_to_be_clickable(
+                                (By.XPATH, '//div[@class="modal-footer"]//button[contains(text(), "continuar")]')
+                            )
+                        )
+                        continuar_button.click()
+                        logger.info(f"Botão 'Continuar' clicado com sucesso para a conta {account['type']}.")
+                    except TimeoutException:
+                        logger.error("Botão 'Continuar' não encontrado ou não clicável.")
+                        self.stderr.write(self.style.ERROR("Botão 'Continuar' não encontrado ou não clicável dentro do tempo limite."))
+                    except Exception as e:
+                        logger.error(f"Erro inesperado ao clicar no botão 'Continuar': {e}")
+
             except Exception as e:
-                logger.error(f"Erro ao aguardar a conclusão da barra de carregamento: {e}")
-                self.stderr.write(self.style.ERROR(f"Erro ao aguardar a conclusão da barra de carregamento: {e}"))
+                logger.error(f"Erro inesperado ao processar a conta {account['type']}: {e}")
+                self.stderr.write(self.style.ERROR(f"Erro inesperado ao processar a conta {account['type']}: {e}"))
+                    
+            # 9. Wait for the loading bar to finish
+            try:
+                time.sleep(100)
+                self.wait_for_loading_bar(driver)
+            except Exception as e:
+                logger.error(f"Error waiting for the loading bar to finish: {e}")
+                self.stderr.write(self.style.ERROR(f"Error waiting for the loading bar to finish: {e}"))
                 return
-            
-            # 10. Clicar no botão "Baixar" para iniciar o download
-            self.stdout.write("Clicando no botão 'Baixar' para iniciar o download...")
+
+            # 10. Click on the "Baixar" button to start the download
             try:
                 baixar_button = WebDriverWait(driver, 30).until(
                     EC.element_to_be_clickable(
@@ -322,32 +322,29 @@ class Command(BaseCommand):
                     )
                 )
                 baixar_button.click()
-                logger.info("Botão 'Baixar' clicado.")
             except TimeoutException:
-                logger.error("Botão 'Baixar' não encontrado ou não clicável.")
-                self.stderr.write(self.style.ERROR("Botão 'Baixar' não encontrado ou não clicável."))
+                logger.error("Button 'Baixar' not found or not clickable.")
+                self.stderr.write(self.style.ERROR("Button 'Baixar' not found or not clickable."))
                 return
 
-            # 11. Esperar o download terminar
-            self.stdout.write("Esperando o download ser concluído...")
+            # 11. Wait for the download to finish
             try:
                 self.wait_for_download(download_dir)
-                self.stdout.write(f"Download concluído com sucesso para {username}!")
-                logger.info(f"Download concluído com sucesso para {username}.")
+                self.stdout.write(f"Download finished successfully for {username}!")
+                logger.info(f"Download finished successfully for {username}.")
             except Exception as e:
-                logger.error(f"Erro ao esperar pelo download para {username}: {e}")
-                self.stderr.write(
-                    self.style.ERROR(f"Erro ao esperar pelo download para {username}: {e}"))
+                logger.error(f"Error waiting for the download to finish for {username}: {e}")
+                self.stderr.write(self.style.ERROR(f"Error waiting for the download to finish for {username}: {e}"))
 
         except TimeoutException as te:
-            logger.error(f"Timeout ao esperar por um elemento para {username}: {te}")
-            self.stderr.write(self.style.ERROR(f"Timeout ao esperar por um elemento para {username}: {te}"))
+            logger.error(f"Timeout waiting for an element for {username}: {te}")
+            self.stderr.write(self.style.ERROR(f"Timeout waiting for an element for {username}: {te}"))
         except Exception as e:
-            logger.error(f"Ocorreu um erro durante a automação para {username}: {e}")
-            self.stderr.write(self.style.ERROR(f"Ocorreu um erro para {username}: {e}"))
+            logger.error(f"Error while downloading report for {username}: {e}")
+            self.stderr.write(self.style.ERROR(f"Error while downloading report for {username}: {e}"))
         finally:
             driver.quit()
-            logger.info(f"Navegador fechado para {username}.")
+            logger.info(f"Browser closed for {username}.")
 
     def wait_for_download(self, download_dir, timeout=120):
         """
@@ -368,15 +365,21 @@ class Command(BaseCommand):
         if not download_complete:
             raise Exception("O download não foi concluído dentro do tempo esperado.")
 
-    def wait_for_loading_bar(self, driver, timeout=120):
+    def wait_for_loading_bar(self, driver: webdriver.Chrome, timeout: int = 180) -> None:
         """
-        Espera até que a barra de carregamento termine.
+        Waits until the loading bar disappears.
         """
         wait = WebDriverWait(driver, timeout)
+    
         try:
-            # Aguarda até que a barra de carregamento desapareça
-            wait.until(EC.invisibility_of_element_located(
-                (By.XPATH, '//div[@class="card-body-space-progress"]//div[@class="progress"]')
+            # Wait until the loading bar is invisible
+            wait.until_not(EC.visibility_of_element_located(
+                (By.CSS_SELECTOR, '.card-body-space-progress')
             ))
-        except TimeoutException:
-            raise Exception("A barra de carregamento não desapareceu dentro do tempo esperado.")
+            
+    
+        except TimeoutException as timeout_exception:
+            raise Exception("The loading bar did not disappear within the expected time.") from timeout_exception
+        except Exception as exception:
+            raise Exception("An error occurred while waiting for the loading bar to disappear.") from exception
+

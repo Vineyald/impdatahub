@@ -5,13 +5,28 @@ import Plot from 'react-plotly.js';
 import { useRouter } from 'next/navigation';
 
 interface ClientInfo {
-  id: string;
-  origem: string;
+  id: number;
   nome: string;
-  cep: string;
-  cpf_cnpj: string;
+  fantasia: string;
   tipo_pessoa: string;
-  ultima_compra: string;
+  cpf_cnpj: string;
+  email: string;
+  celular: string;
+  fone: string;
+  cep: string;
+  rota: string;
+  endereco: string;
+  numero: string;
+  complemento: string;
+  bairro: string;
+  cidade: string;
+  estado: string;
+  situacao: string;
+  vendedor: string;
+  contribuinte: string;
+  codigo_regime_tributario: string;
+  limite_credito: number;
+  ultima_compra: string | null;
 }
 
 interface ClientData {
@@ -37,17 +52,19 @@ const LastPurchaseLineChart: React.FC = () => {
         const clientsGroupedByMonth: Record<string, ClientData[]> = {};
 
         Object.values(parsedData).forEach((client) => {
-          const lastPurchaseDate = new Date(client.info.ultima_compra);
-          if (!isNaN(lastPurchaseDate.getTime())) {
-            const monthKey = `${lastPurchaseDate.getFullYear()}-${String(lastPurchaseDate.getMonth() + 1).padStart(2, '0')}`;
+          const lastPurchaseDate = client.info.ultima_compra ? new Date(client.info.ultima_compra): null;
+          if(lastPurchaseDate){
+            if (!isNaN(lastPurchaseDate.getTime())) {
+              const monthKey = `${lastPurchaseDate.getFullYear()}-${String(lastPurchaseDate.getMonth() + 1).padStart(2, '0')}`;
 
-            monthCounts[monthKey] = (monthCounts[monthKey] || 0) + 1;
+              monthCounts[monthKey] = (monthCounts[monthKey] || 0) + 1;
 
-            if (!clientsGroupedByMonth[monthKey]) {
-              clientsGroupedByMonth[monthKey] = [];
+              if (!clientsGroupedByMonth[monthKey]) {
+                clientsGroupedByMonth[monthKey] = [];
+              }
+              clientsGroupedByMonth[monthKey].push(client);
             }
-            clientsGroupedByMonth[monthKey].push(client);
-          }
+          } 
         });
 
         const sortedMonths = Object.keys(monthCounts).sort();
@@ -66,10 +83,10 @@ const LastPurchaseLineChart: React.FC = () => {
   const navigateToClientList = (clients: ClientData[]) => {
     const currentDate = new Date();
     const clientList = clients.map((client) => {
-      const lastPurchaseDate = new Date(client.info.ultima_compra);
-      const daysInactive = Math.floor(
+      const lastPurchaseDate = client.info.ultima_compra ? new Date(client.info.ultima_compra) : null;
+      const daysInactive = lastPurchaseDate ? Math.floor(
         (currentDate.getTime() - lastPurchaseDate.getTime()) / (1000 * 60 * 60 * 24)
-      );
+      ) : null;
       return {
         id: client.info.id,
         nome: client.info.nome,

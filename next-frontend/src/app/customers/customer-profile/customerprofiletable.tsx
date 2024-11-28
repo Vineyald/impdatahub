@@ -14,14 +14,14 @@ import {
 } from "@nextui-org/react";
 
 interface PurchasesData {
-  numero_venda: string;
+  id: string;
   data_compra: string;
   produto: string;
   quantidade_produto: number;
   preco_unitario: number;
   valor_desconto: number;
   valor_total: number;
-  valor_frete: number;
+  frete: number;
   preco_final: number;
   situacao: string;
 }
@@ -118,15 +118,15 @@ const ClientProfileTable: React.FC<ClientProfileTableProps> = ({ purchases }) =>
             const statusColor =
               statusColorMap[purchase.situacao] || "default"; // Fallback seguro
             return (
-              <TableRow key={`${purchase.numero_venda}-${purchase.produto}`}>
-                <TableCell>{purchase.numero_venda}</TableCell>
+              <TableRow key={`${purchase.id}-${purchase.produto}`}>
+                <TableCell>{purchase.id}</TableCell>
                 <TableCell>{purchase.data_compra}</TableCell>
                 <TableCell>{purchase.produto}</TableCell>
                 <TableCell>{purchase.quantidade_produto}</TableCell>
                 <TableCell>R$ {purchase.preco_unitario}</TableCell>
                 <TableCell>R$ {purchase.valor_desconto}</TableCell>
                 <TableCell>R$ {purchase.valor_total}</TableCell>
-                <TableCell>R$ {purchase.valor_frete}</TableCell>
+                <TableCell>R$ {purchase.frete}</TableCell>
                 <TableCell>R$ {purchase.preco_final}</TableCell>
                 <TableCell>
                   <Chip

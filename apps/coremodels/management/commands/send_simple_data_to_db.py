@@ -9,6 +9,7 @@ import logging
 import re
 import traceback
 from django.db import models
+import time
 
 
 logger = logging.getLogger(__name__)
@@ -30,7 +31,7 @@ class Command(BaseCommand):
 
     COLUMN_MAPPINGS = {
         'Produtos': {
-            'código (SKU)': 'sku',  # Ensure this matches your CSV column
+            'código (SKU)': 'sku',
             'descrição': 'descricao',
             'unidade': 'unidade',
             'preço': 'preco',
@@ -38,8 +39,8 @@ class Command(BaseCommand):
             'estoque disponível': 'estoque_disponivel',
             'custo': 'custo'
         },
-            'Clientes': {
-            'id': 'id',  # Mapeado ao campo primário
+        'Clientes': {
+            'id': 'id',
             'nome': 'nome',
             'fantasia': 'fantasia',
             'endereço': 'endereco',
@@ -49,7 +50,7 @@ class Command(BaseCommand):
             'cep': 'cep',
             'cidade': 'cidade',
             'estado': 'estado',
-            'cnpj / cpf': 'cpf_cnpj',  # Normalized header
+            'cnpj / cpf': 'cpf_cnpj',
             'celular': 'celular',
             'fone': 'fone',
             'tipo pessoa': 'tipo_pessoa',
@@ -58,7 +59,7 @@ class Command(BaseCommand):
             'limite de crédito': 'limite_credito'
         },
         'Vendas': {
-            'número': 'numero',  # Campo primário
+            'número': 'numero',  # Add this line
             'data da venda': 'data_compra',
             'e-commerce': 'canal_venda',
             'situação da venda': 'situacao',
@@ -70,33 +71,39 @@ class Command(BaseCommand):
         parser.add_argument('csv_file', type=str, help='Caminho para o arquivo CSV a ser importado')
 
     def handle(self, *args, **kwargs):
+        start_time = time.time()
+
         csv_file = kwargs['csv_file']
         model_name = self.get_model_name_from_file(csv_file)
         model = self.get_model(model_name)
         if not model:
             return
 
-        mapping = self.get_column_mapping(model)
-        if not mapping:
-            self.stdout.write(self.style.ERROR(f'Nenhum mapeamento de coluna definido para o modelo "{model.__name__}".'))
+        self.stdout.write(f'Importing file: {csv_file}')
+        self.stdout.write(f'Model: {model.__name__}')
+
+        column_mapping = self.get_column_mapping(model)
+        if not column_mapping:
+            self.stdout.write(self.style.ERROR(f'No column mapping defined for model "{model.__name__}".'))
             return
 
-        try:
-            df = self.load_csv(csv_file)
-            self.validate_csv_columns(df, mapping)
+        data_frame = self.load_csv(csv_file)
+        self.stdout.write(f'Loaded CSV with {len(data_frame)} rows')
+        self.validate_csv_columns(data_frame, column_mapping)
 
-            with transaction.atomic():
-                self.clean_consumidor_final(model)
-                existing_objects = self.get_existing_objects(model, df, mapping, model_name)
-                new_records, updated_records = self.prepare_records(df, mapping, existing_objects, model, model_name)
+        self.stdout.write('Validating columns...')
+        with transaction.atomic():
+            self.clean_consumidor_final(model)
+            existing_objects = self.get_existing_objects(model, data_frame, column_mapping, model_name)
+            new_records, updated_records = self.prepare_records(data_frame, column_mapping, existing_objects, model, model_name)
 
-                self.bulk_create_new_records(model, new_records)
-                self.bulk_update_existing_records(model, updated_records)
+            self.stdout.write(f'Creating {len(new_records)} new records')
+            self.bulk_create_new_records(model, new_records)
+            self.stdout.write(f'Updating {len(updated_records)} existing records')
+            self.bulk_update_existing_records(model, updated_records)
 
-            self.stdout.write(self.style.SUCCESS('Importação concluída com sucesso.'))
-
-        except Exception as e:
-            self.handle_error(e)
+        total_time = time.time() - start_time
+        self.stdout.write(self.style.SUCCESS(f'Import completed successfully in {total_time:.2f} seconds.'))
 
     def get_model_name_from_file(self, csv_file):
         return os.path.splitext(os.path.basename(csv_file))[0]
@@ -118,125 +125,153 @@ class Command(BaseCommand):
             logger.error(f'Erro ao carregar CSV: {e}')
             raise
 
-    def validate_csv_columns(self, df, mapping):
-    # Normalize CSV headers to lowercase and remove extra spaces
-        df.columns = df.columns.str.strip().str.lower()
-        normalized_mapping = {k.lower().strip(): v for k, v in mapping.items()}
+    def validate_csv_columns(self, df: pd.DataFrame, column_mapping: dict) -> None:
+        """
+        Validate that the CSV columns match the expected column mapping.
+        """
+        df_columns = {col.strip().lower(): col for col in df.columns}
+        expected_columns = {k.strip().lower(): k for k in column_mapping}
 
-        missing_cols = [k for k in normalized_mapping if k not in df.columns]
-        extra_cols = [col for col in df.columns if col not in normalized_mapping]
+        missing_columns = expected_columns.keys() - df_columns.keys()
+        if missing_columns:
+            raise ValueError(f"Missing required columns: {', '.join(missing_columns)}")
 
-        if missing_cols:
-            error_msg = f"Missing required columns: {', '.join(missing_cols)}"
-            logger.error(error_msg)
-            raise ValueError(error_msg)
-
-        if extra_cols:
-            logger.warning(f"Extra columns in CSV: {extra_cols}")
+        extra_columns = df_columns.keys() - expected_columns.keys()
+        if extra_columns:
+            logger.warning(f"Extra columns in CSV: {', '.join(extra_columns)}")
 
     def clean_consumidor_final(self, model):
         if model.__name__ == 'Clientes':
             model.objects.filter(nome='Consumidor Final').delete()
 
-    def get_existing_objects(self, model, df, mapping, model_name):
-        unique_fields = self.UNIQUE_FIELDS.get(model_name, [])
-        if not unique_fields:
-            logger.error(f"No unique fields defined for model '{model_name}'.")
-            return {}
+    def get_existing_objects(self, model, df, column_mapping, model_name):
+        """
+        Retrieve existing objects based on unique fields, with caching for efficiency.
+        """
+        if not hasattr(self, 'existing_objects_cache'):
+            self.existing_objects_cache = {}
 
-        # Map unique fields to the CSV columns
-        unique_field_column = mapping.get(unique_fields[0])
-        if not unique_field_column:
-            logger.error(f"No mapping found for unique field '{unique_fields[0]}' in model '{model_name}'.")
-            return {}
+        cache_key = f"{model_name}_existing_objects"
+        if cache_key in self.existing_objects_cache:
+            return self.existing_objects_cache[cache_key]
 
-        if unique_field_column not in df.columns:
-            logger.error(f"Column '{unique_field_column}' not found in the CSV for model '{model_name}'.")
-            return {}
+        from django.db.models import Q
 
-        # Extract unique field values
-        unique_field_values = df[unique_field_column].dropna().unique()
-        if not unique_field_values.any():
-            logger.warning(f"No valid unique field values found for column '{unique_field_column}' in the CSV.")
-            return {}
-
-        # Use __in lookup for filtering
-        filter_criteria = {f"{unique_fields[0]}__in": unique_field_values}
-        existing_objects = {
-            getattr(obj, unique_fields[0]): obj
-            for obj in model.objects.filter(**filter_criteria)
-        }
-
-        return existing_objects
-
-    def prepare_records(self, df, mapping, existing_objects, model, model_name):
         unique_fields = self.UNIQUE_FIELDS.get(model_name, [])
         if not unique_fields:
             raise ValueError(f"No unique fields defined for model '{model_name}'.")
 
-        new_records, updated_records = [], []
-        seen_unique_values = set()
+        df_normalized = df.copy()
+        for csv_col, model_field in column_mapping.items():
+            if model_field in unique_fields:
+                df_normalized[csv_col] = (
+                    df_normalized[csv_col]
+                    .astype(str)
+                    .str.strip()
+                    .str.lower()
+                )
 
-        for _, row in df.iterrows():
-            data = self.process_row(mapping, row, model)
-            if data is None:
+        unique_values_set = {
+            tuple(
+                str(row[csv_col]).strip().lower() if pd.notna(row[csv_col]) else None
+                for csv_col, field in column_mapping.items() if field in unique_fields
+            )
+            for _, row in df_normalized.iterrows()
+            if None not in [
+                row[csv_col] for csv_col in column_mapping if column_mapping[csv_col] in unique_fields
+            ]
+        }
+
+        query_filters = (
+            Q(
+                *[
+                    Q(**{f"{field}__iexact": value for field, value in zip(unique_fields, values)})
+                    for values in unique_values_set
+                ],
+                _connector=Q.OR
+            )
+            if unique_values_set else Q()
+        )
+
+        queryset = model.objects.filter(query_filters)
+        self.existing_objects_cache[cache_key] = queryset
+        return queryset
+
+    def prepare_records(self, df, mapping, existing_objects, model, model_name):
+        """
+        Prepare records for creation or updating.
+        """
+        new_records = []
+        updated_records = []
+        processed_unique_keys = set()
+
+        unique_fields = self.UNIQUE_FIELDS.get(model_name)
+        if not unique_fields:
+            raise ValueError(f"No unique fields defined for model '{model_name}'.")
+
+        # Create a lookup for existing objects by unique key
+        def normalize_value(value):
+            if value is None:
+                return None
+            if isinstance(value, (int, float, Decimal)):
+                return str(value)  # Convert numeric values to string
+            return str(value).strip().lower()  # Normalize strings
+
+        existing_objects_lookup = {
+            tuple(normalize_value(getattr(obj, field)) for field in unique_fields): obj
+            for obj in existing_objects
+        }
+
+        for index, row in df.iterrows():
+            record_data = self.process_row(mapping, row, model)
+
+            if record_data is None:
                 continue
 
-            # Create a unique identifier based on unique fields
-            unique_values = tuple(data.get(field, None) for field in unique_fields)
-            if None in unique_values:
-                logger.warning(f"Skipping row due to missing unique fields: {unique_fields}")
+            unique_key = tuple(
+                normalize_value(record_data[field]) for field in unique_fields
+            )
+
+            if unique_key in processed_unique_keys:
                 continue
 
-            standardized_unique = '|'.join([str(value).strip().lower() for value in unique_values])
-            if standardized_unique in seen_unique_values:
-                continue
+            processed_unique_keys.add(unique_key)
 
-            seen_unique_values.add(standardized_unique)
-            existing_obj = existing_objects.get(standardized_unique)
+            existing_record = existing_objects_lookup.get(unique_key)
 
-            if existing_obj:
-                for field, value in data.items():
-                    setattr(existing_obj, field, value)
-                updated_records.append(existing_obj)
+            if existing_record:
+                for field, value in record_data.items():
+                    setattr(existing_record, field, value)
+                updated_records.append(existing_record)
             else:
-                new_records.append(model(**data))
+                new_records.append(model(**record_data))
 
         return new_records, updated_records
 
+
     def process_row(self, mapping, row, model):
-        """
-        Process a single row of data from the CSV and clean it based on the model fields.
-        """
+        """Process a single row of data from the CSV and clean it based on the model fields."""
+
         data = {}
-        for csv_col, model_field in mapping.items():
-            # Normalize the column name before accessing the row
-            normalized_csv_col = csv_col.lower().strip()
-            if normalized_csv_col in row:
-                raw_value = row[normalized_csv_col]
+        for csv_column, model_field in mapping.items():
+            csv_column = csv_column.lower().strip()
+            if csv_column in row:
+                raw_value = row[csv_column]
                 cleaned_value = self.clean_value(model_field, model, raw_value)
-                
-                # Especial para o campo canal_venda no modelo Vendas
+
                 if model.__name__ == 'Vendas' and model_field == 'canal_venda':
-                    # Preencher com 'Pdv' se estiver vazio ou nulo
-                    if not cleaned_value:
-                        cleaned_value = 'Pdv'
-                
+                    cleaned_value = cleaned_value or 'Pdv'
+
                 data[model_field] = cleaned_value
         return data
 
-
-
     def clean_value(self, field_name, model, value):
-        """
-        Clean and convert a value to match the type of a Django model field.
-        """
         if pd.isna(value) or value in (None, '', '-'):
             return None
-
+    
         # Get the field type from the model
         field = model._meta.get_field(field_name)
-
+    
         # Handle different field types
         try:
             if isinstance(field, models.DecimalField):
@@ -255,7 +290,7 @@ class Command(BaseCommand):
                 # Normalize boolean values
                 return str(value).lower() in ('true', '1', 'yes', 'sim')
             elif isinstance(field, models.IntegerField):
-                return int(value)
+                return int(value)  # No need to call strip on integer values
             elif isinstance(field, models.CharField):
                 return str(value).strip()
             elif isinstance(field, models.EmailField):
@@ -269,30 +304,33 @@ class Command(BaseCommand):
 
     def bulk_create_new_records(self, model, new_records):
         if new_records:
+            print(f'Creating new records of model {model.__name__}')
+            print(f'Number of new records: {len(new_records)}')
             try:
                 model.objects.bulk_create(new_records, ignore_conflicts=True)
+                print(f'Finished creating new records of model {model.__name__}')
             except IntegrityError as e:
                 logger.error(f'Erro ao criar novos registros: {e}')
+                print(f'Erro ao criar novos registros: {e}')
                 raise
 
     def bulk_update_existing_records(self, model, updated_records):
-        if updated_records:
-            fields_to_update = [field.name for field in model._meta.fields if field.name != model._meta.pk.name]
-            try:
-                model.objects.bulk_update(updated_records, fields=fields_to_update)
-            except IntegrityError as e:
-                logger.error(f'Erro ao atualizar registros: {e}')
-                raise
+        if not updated_records:
+            return
 
-    def handle_error(self, error):
-        # Usa traceback.format_exception para obter uma versão detalhada do erro
+        fields_to_update = [field.name for field in model._meta.fields if field.name != model._meta.pk.name]
+
+        try:
+            model.objects.bulk_update(updated_records, fields=fields_to_update)
+        except IntegrityError as exc:
+            logger.error(f'Erro ao atualizar registros: {exc}')
+            raise
+
+    def handle_error(self, error: Exception) -> None:
+        """Handle an error by printing it to stderr in a readable format."""
         error_details = traceback.format_exception(type(error), error, error.__traceback__)
-        
-        # Limita a 2 primeiras linhas
-        error_lines = error_details[:19]
-        
-        # Exibe as duas primeiras linhas
-        self.stdout.write(self.style.ERROR(f'Ocorreu um erro: {"\n".join(error_lines)}'))
+        error_message = "".join(error_details[:2])
+        self.stderr.write(self.style.ERROR(f"An error occurred: {error_message}"))
 
     def get_key_from_value(self, mapping, search_value):
         return next((key for key, value in mapping.items() if value == search_value), None)

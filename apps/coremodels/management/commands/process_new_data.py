@@ -51,7 +51,6 @@ class Command(BaseCommand):
                 self.stdout.write("Subindo no banco de dados")
                 call_command('send_simple_data_to_db', caminho_csv)
 
-
             self.stdout.write(self.style.SUCCESS("Todos os comandos foram executados com sucesso!"))
         except Exception as e:
             self.stdout.write(self.style.ERROR(f"Ocorreu um erro: {e}"))
@@ -61,7 +60,7 @@ def get_link(model):
     if model == 'ItemVenda':
         link = {
             "Servi": "https://erp.tiny.com.br/relatorios_personalizados#/view/19",
-            "Imp": "https://erp.tiny.com.br/relatorios_personalizados#/view/809"
+            "Imp": "https://erp.tiny.com.br/relatorios_personalizados#/view/1365"
         }
 
     elif model == 'Vendas':

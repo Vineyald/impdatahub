@@ -29,22 +29,53 @@ export default function App() {
   useEffect(() => {
     const fetchUserData = async () => {
       const token = Cookies.get("accessToken");
-      if (token) {
-        try {
-          const response = await fetch(`${API_URL}/user/`, {
-            headers: {
-              Authorization: `Bearer ${token}`,
-            },
-          });
-          const data = await response.json();
-          setUserName(data.name);
-        } catch (error) {
-          console.error("Erro ao obter dados do usuário:", error);
+  
+      if (!token) {
+        console.warn("No access token found.");
+        return;
+      }
+  
+      const cachedData = localStorage.getItem("userData");
+      const cachedTimestamp = localStorage.getItem("userDataTimestamp");
+  
+      // Check if cached data exists and is not expired
+      if (cachedData && cachedTimestamp) {
+        const now = new Date().getTime();
+        const oneHour = 60 * 60 * 1000;
+  
+        if (now - parseInt(cachedTimestamp, 10) < oneHour) {
+          setUserName(JSON.parse(cachedData).name);
+          return; // Use cached data
         }
       }
+  
+      // Fetch new data from the API
+      try {
+        const response = await fetch(`${API_URL}/user/`, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+          },
+        });
+  
+        if (!response.ok) {
+          throw new Error("Failed to fetch user data");
+        }
+  
+        const data = await response.json();
+  
+        // Store fetched data in localStorage
+        localStorage.setItem("userData", JSON.stringify(data));
+        localStorage.setItem("userDataTimestamp", new Date().getTime().toString());
+  
+        setUserName(data.name);
+      } catch (error) {
+        console.error("Erro ao obter dados do usuário:", error);
+      }
     };
+  
     fetchUserData();
   }, []);
+  
 
   const handleLogout = () => {
     Cookies.remove("accessToken");
@@ -62,7 +93,7 @@ export default function App() {
           className="sm:hidden"
         />
         <NavbarBrand>
-          <p className="font-bold text-inherit">Imperio datahub</p>
+          <Link href="/" className="font-bold text-inherit">Imperio datahub</Link>
         </NavbarBrand>
       </NavbarContent>
 

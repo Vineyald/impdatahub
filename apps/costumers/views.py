@@ -1,17 +1,14 @@
+from datetime import datetime, timedelta
+from decimal import Decimal
 from django.shortcuts import get_object_or_404
 from apps.coremodels.models import Clientes, ItemVenda
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
 from .serializers import ClientSerializer, PurchaseSerializer
 from django.core.cache import cache  # Para caching
-from django.db.models import Q, Max, Value, Prefetch
+from django.db.models import Count, Q, Max, Value, Prefetch, Sum, DecimalField, Subquery, OuterRef
 from django.db.models.functions import Coalesce
-from django.contrib.postgres.aggregates import ArrayAgg
-from concurrent.futures import ThreadPoolExecutor
-from django.db import transaction
 from django.utils.timezone import now
-from collections import defaultdict
-import time
 import json
 import pandas as pd
 from django.http import JsonResponse
@@ -20,113 +17,160 @@ from bisect import bisect_left
 
 @api_view(['GET', 'PUT'])
 def client_profile_api(request, client_id):
-    # Buscar o cliente pelo ID
-    cliente = get_object_or_404(Clientes, id=client_id)
-
-    # Buscar todas as compras do cliente atual
-    compras_cliente = ItemVenda.objects.filter(cliente=cliente).select_related('venda', 'produto')
-
-    # Serializar dados do cliente e das compras
-    client_data = ClientSerializer(cliente).data
-    purchases_data = PurchaseSerializer(compras_cliente, many=True).data
-
-    if request.method == 'PUT':
-        # Atualização dos dados do cliente
-        data = request.data
-        cliente.cep = data.get('cep', cliente.cep)
-        cliente.cpf_cnpj = data.get('cpf_cnpj', cliente.cpf_cnpj)
-        cliente.celular = data.get('celular', cliente.celular)
-        cliente.endereco = data.get('endereco', cliente.endereco)
-        cliente.tipo_pessoa = data.get('tipo_pessoa', cliente.tipo_pessoa)
-        cliente.save()
-
-        return Response({'message': 'Dados atualizados com sucesso!'})
-
-    return Response({
-        'client': client_data,
-        'purchases': purchases_data,
-    })
-
-@api_view(['GET'])
-def all_active_clients_with_pdv_sales(request):
     try:
-        # Verificar se os dados estão em cache
+        # Retrieve the client by ID or return a 404 error if not found
+        cliente = get_object_or_404(Clientes, id=client_id)
+
+        # Retrieve all purchases for the current client
+        compras_cliente = ItemVenda.objects.filter(cliente=cliente).select_related('venda', 'produto')
+
+        # Serialize client and purchase data
+        client_data = ClientSerializer(cliente).data
+        purchases_data = PurchaseSerializer(compras_cliente, many=True).data
+
+        if request.method == 'PUT':
+            # Update client data with provided request data
+            data = request.data
+            cliente.nome = data.get('nome', cliente.nome)
+            cliente.fantasia = data.get('fantasia', cliente.fantasia)
+            cliente.tipo_pessoa = data.get('tipo_pessoa', cliente.tipo_pessoa)
+            cliente.cpf_cnpj = data.get('cpf_cnpj', cliente.cpf_cnpj)
+            cliente.email = data.get('email', cliente.email)
+            cliente.celular = data.get('celular', cliente.celular)
+            cliente.fone = data.get('fone', cliente.fone)
+            cliente.cep = data.get('cep', cliente.cep)
+            cliente.rota = data.get('rota', cliente.rota)
+            cliente.endereco = data.get('endereco', cliente.endereco)
+            cliente.numero = data.get('numero', cliente.numero)
+            cliente.complemento = data.get('complemento', cliente.complemento)
+            cliente.bairro = data.get('bairro', cliente.bairro)
+            cliente.cidade = data.get('cidade', cliente.cidade)
+            cliente.estado = data.get('estado', cliente.estado)
+            cliente.situacao = data.get('situacao', cliente.situacao)
+            cliente.vendedor = data.get('vendedor', cliente.vendedor)
+            cliente.contribuinte = data.get('contribuinte', cliente.contribuinte)
+            cliente.codigo_regime_tributario = data.get('codigo_regime_tributario', cliente.codigo_regime_tributario)
+
+            cliente.save()
+
+        return Response({
+            'client': client_data,
+            'purchases': purchases_data,
+        })
+    except Exception as e:
+        return Response({
+            'error': str(e),
+        }, status=500)
+    
+@api_view(['GET'])
+def all_inactive_clients_with_pdv_sales(request):
+    """
+    Retrieve all active clients with PDV sales.
+
+    Checks cache for existing data; if not present, fetches from database,
+    filters, structures, and caches the results before returning them.
+
+    Args:
+        request: The HTTP request object.
+
+    Returns:
+        Response: JSON response with active clients and their PDV sales data.
+    """
+    try:
+        # Check if data is already cached
         cached_data = cache.get("clientes_ativos_com_vendas_pdv")
         if cached_data:
             return Response(cached_data, status=200)
 
+        # Set today's date for filtering
         hoje = now().date()
         data_padrao = hoje
 
-        # Buscar clientes e anotar a última compra (ignorando vendas canceladas)
+        # Fetch clients from pdv and annotate with last purchase date, excluding canceled sales
         clientes_filtrados = Clientes.objects.annotate(
             ultima_compra=Coalesce(
                 Max(
                     "compras_cliente__venda__data_compra",
                     filter=Q(compras_cliente__venda__canal_venda="Pdv") & ~Q(compras_cliente__venda__situacao="Cancelado")
                 ),
-                Value(None)  # Valor padrão será None para filtrar mais facilmente
+                Value(None)  # Default value will be None for easier filtering
             )
         ).exclude(
             nome__iexact="Consumidor Final"
         ).filter(
-            ultima_compra__isnull=False  # Apenas clientes com pelo menos uma compra
+            ultima_compra__lt=data_padrao - timedelta(days=30)  # Only clients with no purchase in the last 30 days
+        ).prefetch_related(
+            Prefetch(
+                "compras_cliente",
+                queryset=ItemVenda.objects.select_related("venda", "produto").only(
+                    "cliente_id", "produto__descricao", "produto__preco",
+                    "venda__numero", "venda__data_compra",
+                    "quantidade_produto", "valor_total", "valor_desconto", "frete", "preco_final", "venda__situacao"
+                ).filter(
+                    Q(venda__canal_venda="Pdv") & ~Q(venda__situacao="Cancelado"),
+                ),
+                to_attr="compras"
+            )
         )
 
-        # Carregar todas as compras relevantes de uma vez (ignorando vendas canceladas)
-        todas_compras = ItemVenda.objects.filter(
-            Q(venda__canal_venda="Pdv") & ~Q(venda__situacao="Cancelado"),
-            cliente_id__in=[cliente.id for cliente in clientes_filtrados]
-        ).select_related("venda", "produto").only(
-            "cliente_id", "produto__descricao", "produto__preco",
-            "venda__numero", "venda__data_compra",
-            "quantidade_produto", "valor_total", "valor_desconto", "frete", "preco_final", "venda__situacao"
-        )
+        # Filter out clients without purchases
+        clientes_filtrados = [cliente for cliente in clientes_filtrados if len(cliente.compras) > 0]
 
-        # Agrupar compras por cliente
-        compras_por_cliente = defaultdict(list)
-        for compra in todas_compras:
-            compras_por_cliente[compra.cliente_id].append(compra)
-
-        # Estruturar os dados para clientes e suas compras
+        # Structure data for clients and their purchases
+        clientes_ativos = {}
+        # Structure data for clients and their purchases
         clientes_ativos = {}
         for cliente in clientes_filtrados:
-            compras_cliente = compras_por_cliente[cliente.id]
-
-            # Serializar dados do cliente e suas compras
+            # Serialize client data and their purchases
             clientes_ativos[cliente.nome] = {
                 "info": {
                     "id": cliente.id,
                     "nome": cliente.nome,
-                    "cep": cliente.cep,
-                    "cpf_cnpj": cliente.cpf_cnpj,
+                    "fantasia": cliente.fantasia,
                     "tipo_pessoa": cliente.tipo_pessoa,
-                    "ultima_compra": cliente.ultima_compra,
+                    "cpf_cnpj": cliente.cpf_cnpj,
+                    "email": cliente.email,
+                    "celular": cliente.celular,
+                    "fone": cliente.fone,
+                    "cep": cliente.cep,
+                    "rota": cliente.rota,
+                    "endereco": cliente.endereco,
+                    "numero": cliente.numero,
+                    "complemento": cliente.complemento,
+                    "bairro": cliente.bairro,
+                    "cidade": cliente.cidade,
+                    "estado": cliente.estado,
+                    "situacao": cliente.situacao,
+                    "vendedor": cliente.vendedor,
+                    "contribuinte": cliente.contribuinte,
+                    "codigo_regime_tributario": cliente.codigo_regime_tributario,
+                    "limite_credito": cliente.limite_credito,
+                    "ultima_compra": cliente.ultima_compra
                 },
                 "purchases": [
                     {
-                        "numero_venda": item.venda.numero,
-                        "data_compra": item.venda.data_compra,
-                        "produto": item.produto.descricao,
-                        "quantidade_produto": item.quantidade_produto,
-                        "preco_unitario": item.produto.preco,
-                        "valor_total": item.valor_total,
-                        "valor_desconto": item.valor_desconto,
-                        "frete": item.frete,
-                        "preco_final": item.preco_final,
-                        "situacao": item.venda.situacao,
+                        "id": compra.venda.id,
+                        "data_compra": compra.venda.data_compra,
+                        "produto": compra.produto.sku,
+                        "quantidade_produto": compra.quantidade_produto,
+                        "valor_total": compra.valor_total,
+                        "valor_desconto": compra.valor_desconto,
+                        "frete": compra.frete,
+                        "preco_final": compra.preco_final,
+                        "situacao": compra.venda.situacao
                     }
-                    for item in compras_cliente
-                ],
+                    for compra in cliente.compras
+                ]
             }
 
-        # Cachear os resultados
+        # Cache the results
         cache.set("clientes_ativos_com_vendas_pdv", clientes_ativos, timeout=3600)
         return Response(clientes_ativos, status=200)
 
     except Exception as e:
+        # Return error response in case of an unexpected error
         return Response({"error": "Ocorreu um erro inesperado.", "details": str(e)}, status=500)
-    
+
 # Load the CEP range table
 file_path = 'datasets/Lista_de_CEPs.xlsx'
 cep_table = pd.read_excel(file_path)
@@ -164,158 +208,195 @@ def get_city_by_cep(cep: str) -> str:
 
 @csrf_exempt
 def get_cities_and_coordinates_from_ceps(request):
-    if request.method == 'POST':
-        try:
-            data = json.loads(request.body)
-            ceps = data.get('ceps', [])
+    try:
+        if request.method == 'POST':
+            try:
+                data = json.loads(request.body)
+                ceps = data.get('ceps', [])
 
-            if not isinstance(ceps, list):
-                return JsonResponse({'error': 'Formato de entrada inválido. A lista de CEPs é esperada.'}, status=400)
+                if not isinstance(ceps, list):
+                    return JsonResponse({'error': 'Formato de entrada inválido. A lista de CEPs é esperada.'}, status=400)
 
-            response = {}
-            for cep in ceps:
-                city = get_city_by_cep(cep)
-                if city != "Localidade não encontrada":
-                    response[cep] = {
-                        'cidade': city,
-                    }
+                response = {}
+                for cep in ceps:
+                    city = get_city_by_cep(cep)
+                    if city != "Localidade não encontrada":
+                        response[cep] = {
+                            'cidade': city,
+                        }
 
-            return JsonResponse(response, status=200)
-        except json.JSONDecodeError:
-            return JsonResponse({'error': 'JSON inválido.'}, status=400)
-
-    return JsonResponse({'error': 'Método não permitido.'}, status=405)
+                return JsonResponse(response, status=200)
+            except json.JSONDecodeError:
+                return JsonResponse({'error': 'JSON inválido.'}, status=400)
+        else:
+            return JsonResponse({'error': 'Método não permitido.'}, status=405)
+    except Exception as e:
+        return JsonResponse({'error': str(e)}, status=500)
 
 @api_view(['GET'])
 def all_clients_with_pdv_sales(request):
+    """
+    Retrieve all clients, including those without PDV sales, excluding inactive ones.
+    
+    Checks cache first; if not found, queries the database, structures data,
+    caches it, and returns the result.
+    """
     try:
-        start_time = time.time()
-        print("Execution started.")
-
-        hoje = now().date()
-        data_padrao = None
-
         # Check cache
-        cached_data = cache.get("todos_clientes_com_vendas_pdv")
+        cached_data = cache.get("all_clients_with_pdv_sales")
         if cached_data:
             return Response(cached_data, status=200)
 
-        # Fetch clients excluding "Consumidor Final" and null "tipo_pessoa"
-        clients = Clientes.objects.exclude(
-            nome__iexact="Consumidor Final"
-        ).exclude(
-            tipo_pessoa__isnull=True
-        ).annotate(
+        # Fetch and annotate clients with their last PDV purchase
+        clientes = Clientes.objects.annotate(
             ultima_compra=Coalesce(
                 Max(
                     "compras_cliente__venda__data_compra",
-                    filter=Q(compras_cliente__venda__canal_venda="Pdv") & ~Q(compras_cliente__venda__situacao="Cancelado")
+                    filter=~Q(compras_cliente__venda__situacao="Cancelado")
                 ),
-                Value(data_padrao)
+                Value(None)
             )
+        ).exclude(
+            nome__iexact="Consumidor Final"
         ).prefetch_related(
-            Prefetch("compras_cliente", queryset=ItemVenda.objects.select_related("venda", "produto"))
+            Prefetch(
+                "compras_cliente",
+                queryset=ItemVenda.objects.select_related("venda", "produto").filter(
+                    ~Q(venda__situacao="Cancelado")
+                ),
+                to_attr="compras"
+            )
         )
 
-        # Group clients by name
-        clients_by_name = defaultdict(list)
-        for client in clients:
-            clients_by_name[client.nome].append(client)
+        # Serialize data for clients and their purchases
+        clientes_data = {
+            cliente.nome: {
+                "info": {
+                    "id": cliente.id,
+                    "nome": cliente.nome,
+                    "fantasia": cliente.fantasia,
+                    "tipo_pessoa": cliente.tipo_pessoa,
+                    "cpf_cnpj": cliente.cpf_cnpj,
+                    "email": cliente.email,
+                    "celular": cliente.celular,
+                    "fone": cliente.fone,
+                    "cep": cliente.cep,
+                    "rota": cliente.rota,
+                    "endereco": cliente.endereco,
+                    "numero": cliente.numero,
+                    "complemento": cliente.complemento,
+                    "bairro": cliente.bairro,
+                    "cidade": cliente.cidade,
+                    "estado": cliente.estado,
+                    "situacao": cliente.situacao,
+                    "vendedor": cliente.vendedor,
+                    "contribuinte": cliente.contribuinte,
+                    "codigo_regime_tributario": cliente.codigo_regime_tributario,
+                    "limite_credito": cliente.limite_credito,
+                    "ultima_compra": cliente.ultima_compra
+                },
+                "purchases": [
+                    {
+                        "data_compra": purchase.venda.data_compra,
+                        "produto": purchase.produto.descricao,
+                        "quantidade": purchase.quantidade_produto,
+                        "valor_total": purchase.valor_total,
+                        "valor_desconto": purchase.valor_desconto,
+                        "frete": purchase.frete,
+                        "preco_final": purchase.preco_final,
+                        "canal": purchase.venda.canal_venda,
+                    }
+                    for purchase in cliente.compras
+                ] if cliente.compras else [],  # Handle clients with no purchases
+            }
+            for cliente in clientes
+        }
 
-        # Fetch and group sales data for "Pdv" channel
-        sales_data = (
-            ItemVenda.objects.filter(venda__canal_venda="Pdv")
-            .values("cliente_id")
-            .annotate(compras=ArrayAgg("id_item_venda", distinct=True))
-        )
-        sales_by_client = {sale["cliente_id"]: sale["compras"] for sale in sales_data}
+        # Cache the results
+        cache.set("all_clients_with_pdv_sales", clientes_data, timeout=3600)
 
-        # Process clients and purchases using parallel processing
-        with ThreadPoolExecutor(max_workers=10) as executor:
-            processed_clients = list(executor.map(
-                lambda name: process_client_group(name, clients_by_name[name], sales_by_client),
-                clients_by_name.keys()
-            ))
-
-        clients_to_delete = [data["id_to_delete"] for data in processed_clients if data["id_to_delete"]]
-        if clients_to_delete:
-            # Removemos os clientes da seleção, sem alterar o banco de dados
-            processed_clients = [data for data in processed_clients if data["id_to_delete"] not in clients_to_delete]
-
-        # Combine results and cache
-        client_data = {data["name"]: data["client_data"] for data in processed_clients}
-        cache.set("todos_clientes_com_vendas_pdv", client_data, timeout=3600)
-
-        print(f"Total execution time: {time.time() - start_time:.2f} seconds.")
-        return Response(client_data, status=200)
+        return Response(clientes_data, status=200)
 
     except Exception as e:
         return Response({"error": "Unexpected error occurred.", "details": str(e)}, status=500)
 
-def process_client_group(name, client_list, sales_by_client):
-    """
-    Process a group of clients with the same name and their purchases.
-    Optimized for use with parallel processing.
-    """
-    client_servi = next((c for c in client_list if c.origem == "servi"), None)
-    client_imp = next((c for c in client_list if c.origem == "imp"), None)
-    purchases = combine_purchases(client_servi, client_imp, sales_by_client)
+@api_view(["GET"])
+def top_20_clients(request):
+    try:
+        # Get the current date
+        default_date = datetime.now().date()
 
-    id_to_delete = client_imp.id if client_imp and client_servi else None
-    main_client = client_servi or client_imp
-    client_data = serialize_client_data(main_client, purchases) if main_client else None
+        # Capture date parameters from request
+        start_date = request.GET.get("start_date")
+        end_date = request.GET.get("end_date")
 
-    return {
-        "name": name,
-        "client_data": client_data,
-        "id_to_delete": id_to_delete,
-    }
+        # Set default date range if not provided
+        if not start_date:
+            start_date = "1900-01-01"  # Arbitrarily old date to include all data
+        if not end_date:
+            end_date = default_date.strftime("%Y-%m-%d")  # Default to today
 
-def combine_purchases(client_servi, client_imp, sales_by_client):
-    """
-    Combine purchases for 'servi' and 'imp' clients.
-    """
-    purchases = []
-    if client_servi:
-        ids = sales_by_client.get(client_servi.id, [])
-        purchases.extend(
-            ItemVenda.objects.filter(id_item_venda__in=ids).select_related("venda", "produto")
+        # Parse dates
+        try:
+            start_date = datetime.strptime(start_date, "%Y-%m-%d").date()
+            end_date = datetime.strptime(end_date, "%Y-%m-%d").date()
+        except ValueError:
+            return Response({"error": "Invalid date format. Use YYYY-MM-DD."}, status=400)
+
+        # Filter sales within the date range and not cancelled
+        sales_in_date_range = ItemVenda.objects.filter(
+            venda__canal_venda="Pdv"
+        ).exclude(
+            venda__situacao="Cancelado"
+        ).filter(
+            venda__data_compra__gte=start_date,
+            venda__data_compra__lte=end_date
         )
-    if client_imp:
-        ids = sales_by_client.get(client_imp.id, [])
-        purchases.extend(
-            ItemVenda.objects.filter(id_item_venda__in=ids).select_related("venda", "produto")
-        )
-    return purchases
 
+        # Aggregate data based only on the filtered sales
+        total_gasto_subquery = sales_in_date_range.filter(
+            cliente_id=OuterRef('id')
+        ).values('cliente_id').annotate(
+            total_gasto=Coalesce(
+                Sum('valor_total'),
+                Value(Decimal("0.00"), output_field=DecimalField())
+            )
+        ).values('total_gasto')
 
-def serialize_client_data(client, purchases):
-    """
-    Serialize client information and purchases.
-    """
-    return {
-        "info": {
-            "id": client.id,
-            "origem": client.origem,
-            "nome": client.nome,
-            "cep": client.cep,
-            "cpf_cnpj": client.cpf_cnpj,
-            "tipo_pessoa": client.tipo_pessoa,
-            "ultima_compra": client.ultima_compra,
-        },
-        "purchases": [
+        numero_compras_subquery = sales_in_date_range.filter(
+            cliente_id=OuterRef('id')
+        ).values('cliente_id').annotate(
+            numero_compras=Count('venda', distinct=True)
+        ).values('numero_compras')
+
+        ultima_compra_subquery = sales_in_date_range.filter(
+            cliente_id=OuterRef('id')
+        ).values('cliente_id').annotate(
+            ultima_compra=Max('venda__data_compra')
+        ).values('ultima_compra')
+
+        # Filter and annotate clients
+        clientes_filtrados = Clientes.objects.annotate(
+            total_gasto=Subquery(total_gasto_subquery),
+            numero_compras=Subquery(numero_compras_subquery),
+            ultima_compra=Subquery(ultima_compra_subquery)
+        ).exclude(
+            nome__iexact="Consumidor Final"
+        ).filter(
+            total_gasto__gt=0  # Only include clients with purchases in the period
+        ).order_by("-total_gasto")[:20]
+
+        # Serialize client data
+        clientes_serializados = [
             {
-                "numero_venda": purchase.venda.numero_venda_original,
-                "data_compra": purchase.venda.data_compra,
-                "produto": purchase.produto.descricao,
-                "quantidade_produto": purchase.quantidade_produto,
-                "preco_unitario": purchase.produto.preco_unitario,
-                "valor_total": purchase.valor_total,
-                "valor_desconto": purchase.valor_desconto,
-                "frete": purchase.frete,
-                "preco_final": purchase.preco_final,
-                "situacao": purchase.venda.situacao,
+                "id": cliente.id,
+                "nome": cliente.nome,
+                "ultima_compra": cliente.ultima_compra,
+                "total_gasto": cliente.total_gasto,
+                "numero_compras": cliente.numero_compras,
             }
-            for purchase in purchases
-        ],
-    }
+            for cliente in clientes_filtrados
+        ]
+        return Response(clientes_serializados, status=200)
+    except Exception as e:
+        return Response({"error": str(e)}, status=400)

@@ -9,10 +9,28 @@ const GEOJSON_URL = 'https://raw.githubusercontent.com/tbrugz/geodata-br/master/
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
 interface ClientInfo {
-  id: string;
+  id: number;
   nome: string;
-  ultima_compra: string;
-  cep?: string;
+  fantasia: string;
+  tipo_pessoa: string;
+  cpf_cnpj: string;
+  email: string;
+  celular: string;
+  fone: string;
+  cep: string;
+  rota: string;
+  endereco: string;
+  numero: string;
+  complemento: string;
+  bairro: string;
+  cidade: string;
+  estado: string;
+  situacao: string;
+  vendedor: string;
+  contribuinte: string;
+  codigo_regime_tributario: string;
+  limite_credito: number;
+  ultima_compra: string | null;
 }
 
 interface ClientData {
@@ -20,8 +38,8 @@ interface ClientData {
 }
 
 interface CityData {
-  cidade: string;
-  count: number;
+  cityName: string;
+  clientCount: number;
 }
 
 interface GeoJsonFeature {
@@ -43,90 +61,93 @@ const InactiveClientsChoroplethMap: React.FC = () => {
 
   useEffect(() => {
     const fetchData = async () => {
+      console.log("Fetching data process started...");
       const storedData = localStorage.getItem('inactiveClientsData');
       if (!storedData) {
-        console.error("Nenhum dado de cliente encontrado no localStorage.");
+        console.error("No client data found in localStorage.");
         return;
       }
 
+      console.log("Parsing stored client data...");
       const clients: Record<string, ClientData> = JSON.parse(storedData);
 
-      // Extrair CEPs e remover duplicados
+      console.log("Extracting unique CEPs...");
       const ceps = Array.from(
         new Set(
           Object.values(clients)
-            .map((client) => client?.info?.cep?.replace(/\./g, '').replace('-', ''))
+            .map((client) => client?.info?.cep?.replace(/\./g, '').replace('-', '').replace(' ', ''))
             .filter((cep) => cep && cep.trim() !== '')
         )
       );
 
       try {
-        // Buscar GeoJSON
+        console.log("Fetching GeoJSON data...");
         const geoJsonResponse = await fetch(GEOJSON_URL);
         const geoJson: GeoJsonData = await geoJsonResponse.json();
         setGeoJsonData(geoJson);
 
-        // Converter CEPs para nomes de cidades via API
+        console.log("Fetching city mapping data...");
         const response = await axios.post(`${API_URL}/ceps_to_latitude/`, { ceps });
-        const data: Record<string, { cidade: string }> = response.data;
+        const cityMapping: Record<string, { cidade: string }> = response.data;
 
-        const cityCount: Record<string, number> = {};
-        const cityClients: Record<string, ClientData[]> = {};
+        console.log("Processing client data by city...");
+        const cityCounts: Record<string, number> = {};
+        const clientGroups: Record<string, ClientData[]> = {};
 
-        // Processar os dados retornados pela API
         Object.values(clients).forEach((client) => {
           const clientCep = client.info.cep?.replace(/\./g, '').replace('-', '');
-          const cityInfo = clientCep ? data[clientCep] : null; // Buscar a cidade pelo CEP
+          const cityInfo = clientCep ? cityMapping[clientCep] : null;
 
           if (cityInfo && cityInfo.cidade) {
-            cityCount[cityInfo.cidade] = (cityCount[cityInfo.cidade] || 0) + 1;
+            cityCounts[cityInfo.cidade] = (cityCounts[cityInfo.cidade] || 0) + 1;
 
-            if (!cityClients[cityInfo.cidade]) {
-              cityClients[cityInfo.cidade] = [];
+            if (!clientGroups[cityInfo.cidade]) {
+              clientGroups[cityInfo.cidade] = [];
             }
-            cityClients[cityInfo.cidade].push(client);
+            clientGroups[cityInfo.cidade].push(client);
           }
         });
 
-        // Criar dados para plotagem
-        const cityDataArray: CityData[] = Object.entries(cityCount).map(([cidade, count]) => ({
-          cidade,
-          count,
+        console.log("Formatting city data...");
+        const formattedCityData: CityData[] = Object.entries(cityCounts).map(([cityName, clientCount]) => ({
+          cityName,
+          clientCount,
         }));
 
-        setCityData(cityDataArray);
-        setClientsByCity(cityClients);
+        console.log("Updating state with formatted data...");
+        setCityData(formattedCityData);
+        setClientsByCity(clientGroups);
       } catch (error) {
-        console.error("Erro ao buscar dados da API ou GeoJSON:", error);
+        console.error("Error fetching data from API or GeoJSON:", error);
       }
     };
 
     fetchData();
   }, []);
 
-  const navigateToClientListByCity = (cidade: string) => {
-    const clients = clientsByCity[cidade];
-
+  const navigateToClientListByCity = (cityName: string) => {
+    const clients = clientsByCity[cityName];
+  
     if (clients) {
       const clientList = clients.map((client) => {
         const currentDate = new Date();
-        const lastPurchaseDate = new Date(client.info.ultima_compra);
-        const daysInactive = Math.floor(
+        const lastPurchaseDate = client.info.ultima_compra ? new Date(client.info.ultima_compra) : null;
+        const daysInactive = lastPurchaseDate ? Math.floor(
           (currentDate.getTime() - lastPurchaseDate.getTime()) / (1000 * 60 * 60 * 24)
-        );
-
+        ) : null;
+  
         return {
           id: client.info.id,
           nome: client.info.nome,
-          ultima_compra: client.info.ultima_compra,
-          dias_inativo: daysInactive,
+          ultimaCompra: client.info.ultima_compra,
+          diasInativo: daysInactive,
         };
       });
 
       sessionStorage.setItem('inactiveClients', JSON.stringify(clientList));
       router.push('/customers/customer-inactive/overview');
     } else {
-      console.log("Nenhum cliente encontrado para a cidade:", cidade);
+      console.log("No clients found for the city:", cityName);
     }
   };
 
@@ -138,8 +159,8 @@ const InactiveClientsChoroplethMap: React.FC = () => {
           data={[
             {
               type: 'choropleth',
-              locations: cityData.map((city) => city.cidade),
-              z: cityData.map((city) => city.count),
+              locations: cityData.map((city) => city.cityName),
+              z: cityData.map((city) => city.clientCount),
               colorscale: 'Viridis',
               colorbar: { title: 'Clientes Inativos', thickness: 10 },
               geojson: geoJsonData,
@@ -164,10 +185,10 @@ const InactiveClientsChoroplethMap: React.FC = () => {
           onClick={(event: Plotly.PlotMouseEvent) => {
             const pointIndex = event.points?.[0]?.pointIndex;
             if (pointIndex !== undefined && cityData[pointIndex]) {
-              const cidade = cityData[pointIndex].cidade;
-              navigateToClientListByCity(cidade);
+              const cityName = cityData[pointIndex].cityName;
+              navigateToClientListByCity(cityName);
             } else {
-              console.log("Nenhuma cidade identificada no clique.");
+              console.log("No city identified on click.");
             }
           }}
           style={{ width: '100%', height: '500px' }}
@@ -179,7 +200,7 @@ const InactiveClientsChoroplethMap: React.FC = () => {
           }}
         />
       ) : (
-        <div className="text-center">Carregando dados ou sem resultados.</div>
+        <div className="text-center">Loading data or no results.</div>
       )}
     </div>
   );
