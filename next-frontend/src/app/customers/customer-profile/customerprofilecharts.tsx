@@ -9,6 +9,7 @@ interface Purchase {
   id: string;
   data_compra: string;
   produto: string;
+  sku: string;
   quantidade_produto: number;
   preco_unitario: number;
   valor_desconto: number;

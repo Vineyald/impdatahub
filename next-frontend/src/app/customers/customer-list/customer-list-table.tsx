@@ -54,6 +54,7 @@ interface Purchase {
   valor_desconto: number;
   frete: number;
   preco_final: number;
+  canal: string;
 }
 
 interface ClientData {

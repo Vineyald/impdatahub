@@ -105,11 +105,10 @@ export default function App() {
                 Dashboard Clientes
               </Button>
             </DropdownTrigger>
-            <DropdownMenu variant="faded" aria-label="Dropdown menu" disabledKeys={["custumer_metrics"]}>
+            <DropdownMenu variant="faded" aria-label="Dropdown menu">
               <DropdownItem key="custumer_inactive" href="/customers/customer-inactive/">Clientes Inativos</DropdownItem>
               <DropdownItem key="custumer_ranking" href="/customers/customer-ranking/">Ranking de Clientes</DropdownItem>
-              <DropdownItem key="custumer_filters" href="/customers/customer-list/">Filtrar Clientes</DropdownItem>
-              <DropdownItem key="custumer_metrics">Clientes sem Compras</DropdownItem>
+              <DropdownItem key="custumer_filters" href="/customers/customer-list/">Lista de Clientes</DropdownItem>
             </DropdownMenu>
           </Dropdown>
         </NavbarItem>
@@ -120,10 +119,11 @@ export default function App() {
                 Dashboard Produtos
               </Button>
             </DropdownTrigger>
-            <DropdownMenu variant="faded" aria-label="Dropdown menu" disabledKeys={["product_ranking","product_stuck","product_dash"]}>
-              <DropdownItem key="product_ranking">Produtos mais Vendidos</DropdownItem>
+            <DropdownMenu variant="faded" aria-label="Dropdown menu" disabledKeys={["product_stuck","product_dash"]}>
+              <DropdownItem key="product_best" href="/products/product-best/">Produtos mais Vendidos</DropdownItem>
               <DropdownItem key="product_stuck">Produtos sem Vendas</DropdownItem>
               <DropdownItem key="product_dash">Relatórios de Produtos</DropdownItem>
+              <DropdownItem key="product_list" href="/products/product-list/">Lista de Produtos</DropdownItem>
             </DropdownMenu>
           </Dropdown>
         </NavbarItem>

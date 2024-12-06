@@ -42,3 +42,4 @@ next-env.d.ts
 /datasets/csv
 .env.local
 .env
+basefiles

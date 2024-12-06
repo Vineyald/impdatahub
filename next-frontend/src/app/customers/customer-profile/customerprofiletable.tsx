@@ -11,12 +11,14 @@ import {
   Pagination,
   SortDescriptor,
   Chip,
+  Link,
 } from "@nextui-org/react";
 
 interface PurchasesData {
   id: string;
   data_compra: string;
   produto: string;
+  sku: string;
   quantidade_produto: number;
   preco_unitario: number;
   valor_desconto: number;
@@ -121,7 +123,11 @@ const ClientProfileTable: React.FC<ClientProfileTableProps> = ({ purchases }) =>
               <TableRow key={`${purchase.id}-${purchase.produto}`}>
                 <TableCell>{purchase.id}</TableCell>
                 <TableCell>{purchase.data_compra}</TableCell>
-                <TableCell>{purchase.produto}</TableCell>
+                <TableCell>
+                  <Link className='decoration-2 hover:underline decoration-pink-500 text-inherit' href={`/products/product-page/${purchase.sku}`}>
+                    {purchase.produto}
+                  </Link>
+                </TableCell>
                 <TableCell>{purchase.quantidade_produto}</TableCell>
                 <TableCell>R$ {purchase.preco_unitario}</TableCell>
                 <TableCell>R$ {purchase.valor_desconto}</TableCell>

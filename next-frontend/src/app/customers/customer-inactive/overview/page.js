@@ -9,10 +9,9 @@ import {
     TableRow,
     TableCell,
     Pagination,
-    getKeyValue,
     Spacer,
+    Link,
 } from "@nextui-org/react";
-import Link from 'next/link';
 
 const InactiveClientsOverview = () => {
   const [page, setPage] = useState(1);
@@ -55,18 +54,34 @@ const InactiveClientsOverview = () => {
     setPage(1); // Reset page to 1 on sort change
   };
 
-  const capitalizeText = (text) => {
-    if (typeof text !== 'string') return text;
-    return text
-      .toLowerCase()
-      .replace(/(?:^|\s)\S/g, (char) => char.toUpperCase())
-      .trim();
-  };
-
   const renderCell = useCallback((client, columnKey) => {
-    const cellValue = getKeyValue(client, columnKey);
-    return <span>{capitalizeText(cellValue)}</span>;
-  }, []);
+    const cellValue = client[columnKey];
+    if (columnKey === 'nome') {
+      return (
+        <Link
+          href={`/customers/customer-profile/${client.id}`}
+          className="decoration-2 hover:underline decoration-pink-500 text-inherit"
+        >
+          {(cellValue ?? '')
+            .toString()
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/\b\w/g, (l) => l.toUpperCase())}
+        </Link>
+      );
+    }
+    return (
+      <span>
+        {(cellValue ?? '')
+          .toString()
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/\b\w/g, (l) => l.toUpperCase())}
+      </span>
+    );
+  }, []); 
 
   return (
     <div>
@@ -103,10 +118,10 @@ const InactiveClientsOverview = () => {
           <TableColumn key="nome" allowsSorting>
             Nome
           </TableColumn>
-          <TableColumn key="ultima_compra" allowsSorting>
+          <TableColumn key="ultimaCompra" allowsSorting>
             Data da Última Comp
           </TableColumn>
-          <TableColumn key="dias_inativo" allowsSorting>
+          <TableColumn key="diasInativo" allowsSorting>
             Dias Inativos
           </TableColumn>
         </TableHeader>
@@ -115,9 +130,7 @@ const InactiveClientsOverview = () => {
             <TableRow key={`${client.nome}-${client.origem}`}>
               {(columnKey) => (
                 <TableCell>
-                  <Link href={`/customers/customer-profile/${client.id}`}>
-                    {renderCell(client, columnKey)}
-                  </Link>
+                  {renderCell(client, columnKey)}
                 </TableCell>
               )}
             </TableRow>

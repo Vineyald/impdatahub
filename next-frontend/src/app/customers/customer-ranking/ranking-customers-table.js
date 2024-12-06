@@ -11,8 +11,8 @@ import {
   TableCell,
   Spacer,
   Input,
+  Link,
 } from "@nextui-org/react";
-import Link from 'next/link';
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
@@ -61,31 +61,44 @@ const RankingClientsTable = () => {
     setSortDescriptor(descriptor);
   };
 
-  const capitalizeText = (text) => {
-    if (typeof text !== 'string') return text;
-    return text
-      .toLowerCase()
-      .replace(/(?:^|\s)\S/g, (char) => char.toUpperCase())
-      .trim();
-  };
-
   const renderCell = useCallback((client, columnKey) => {
     const cellValue = client[columnKey];
-
-    // Format "total_gasto" column
-    if (columnKey === "total_gasto") {
+    if (columnKey === 'nome') {
+      return (
+        <Link
+          href={`/customers/customer-profile/${client.id}`}
+          className="decoration-2 hover:underline decoration-pink-500 text-inherit"
+        >
+          {(cellValue ?? '')
+            .toString()
+            .toLowerCase()
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '')
+            .replace(/\b\w/g, (l) => l.toUpperCase())}
+        </Link>
+      );
+    }
+    else if (columnKey === 'total_gasto') {
       return (
         <span>
-          {new Intl.NumberFormat("pt-BR", {
-            style: "currency",
-            currency: "BRL",
-          }).format(cellValue || 0)}
+          {new Intl.NumberFormat('pt-BR', {
+            style: 'currency',
+            currency: 'BRL',
+          }).format(cellValue)}
         </span>
       );
     }
-
-    return <span>{capitalizeText(cellValue)}</span>;
-  }, []);
+    return (
+      <span>
+        {(cellValue ?? '')
+          .toString()
+          .toLowerCase()
+          .normalize('NFD')
+          .replace(/[\u0300-\u036f]/g, '')
+          .replace(/\b\w/g, (l) => l.toUpperCase())}
+      </span>
+    );
+  }, []); 
 
   return (
     <div className="container mx-auto">
@@ -143,9 +156,7 @@ const RankingClientsTable = () => {
               <TableRow key={client.id}>
                 {(columnKey) => (
                   <TableCell>
-                    <Link href={`/customers/customer-profile/${client.id}`}>
-                      {renderCell(client, columnKey)}
-                    </Link>
+                    {renderCell(client, columnKey)}
                   </TableCell>
                 )}
               </TableRow>

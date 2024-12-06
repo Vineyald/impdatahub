@@ -7,7 +7,7 @@ from django.contrib.auth.models import (
     Permission
 )
 from decimal import Decimal
-from django.db.models import Sum, F, Q
+from django.db.models import Sum, F
 
 '''
 ==========================================================
@@ -92,11 +92,7 @@ class Produtos(models.Model):
 
     def estoque_suficiente(self, quantidade):
         return self.estoque_disponivel >= quantidade
-
-    def vendas_totais(self):
-        """Retorna o total de itens vendidos deste produto."""
-        return self.itens_produto.aggregate(total=Sum('quantidade_produto'))['total'] or Decimal('0.00')
-
+    
     class Meta:
         verbose_name = "Produto"
         verbose_name_plural = "Produtos"
@@ -156,16 +152,32 @@ class Vendas(models.Model):
     
 class ItemVenda(models.Model):
     id_item_venda = models.AutoField(primary_key=True)
-    venda = models.ForeignKey(Vendas, on_delete=models.CASCADE, related_name='itens_venda')
+    venda = models.ForeignKey('Vendas', on_delete=models.CASCADE, related_name='itens_venda')
     cliente = models.ForeignKey('Clientes', on_delete=models.CASCADE, related_name='compras_cliente')
-    vendedor = models.ForeignKey('Vendedores', on_delete=models.CASCADE, related_name='vendas_vendedor')
+    vendedor = models.ForeignKey('Vendedores', on_delete=models.CASCADE, related_name='vendas_vendedor', blank=True, null=True)
     produto = models.ForeignKey('Produtos', on_delete=models.CASCADE, related_name='itens_produto')
-    quantidade_produto = models.DecimalField(max_digits=10, decimal_places=2)
+    quantidade_produto = models.FloatField()
+    valor_unitario = models.DecimalField(max_digits=10, decimal_places=2, blank=True, null=True)
     valor_total = models.DecimalField(max_digits=10, decimal_places=2)
     valor_desconto = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+    desconto_rateado = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+    frete_rateado = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
+    despesas_rateadas = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
     frete = models.DecimalField(max_digits=10, decimal_places=2, default=Decimal('0.00'))
     preco_final = models.DecimalField(max_digits=10, decimal_places=2)
     loja = models.CharField(max_length=255, null=True)
+    rastreamento = models.CharField(max_length=255, null=True, blank=True)
+    ordem_compra = models.CharField(max_length=255, null=True, blank=True)
+    destinatario = models.CharField(max_length=255, null=True, blank=True)
+    cpf_cnpj_entrega = models.CharField(max_length=180, null=True, blank=True)
+    cep_entrega = models.CharField(max_length=100, null=True, blank=True)
+    municipio_entrega = models.CharField(max_length=100, null=True, blank=True)
+    estado_entrega = models.CharField(max_length=100, null=True, blank=True)
+    endereco_entrega = models.CharField(max_length=255, null=True, blank=True)
+    numero_entrega = models.CharField(max_length=100, null=True, blank=True)
+    complemento_entrega = models.CharField(max_length=255, null=True, blank=True)
+    bairro_entrega = models.CharField(max_length=100, null=True, blank=True)
+    fone_entrega = models.CharField(max_length=150, null=True, blank=True)
 
     class Meta:
         unique_together = ('venda', 'produto')

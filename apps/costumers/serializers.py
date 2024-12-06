@@ -26,6 +26,7 @@ class PurchaseSerializer(serializers.ModelSerializer):
     id = serializers.IntegerField(source='venda.id', read_only=True)
     data_compra = serializers.DateField(source='venda.data_compra', read_only=True)
     situacao = serializers.CharField(source='venda.situacao', read_only=True)
+    sku = serializers.CharField(source='produto.sku', read_only=True)
     produto = serializers.CharField(source='produto.descricao', read_only=True)
     preco_unitario = serializers.DecimalField(source='produto.preco', max_digits=10, decimal_places=2, read_only=True)
     quantidade_produto = serializers.DecimalField(max_digits=10, decimal_places=2)
@@ -41,6 +42,7 @@ class PurchaseSerializer(serializers.ModelSerializer):
             'id',
             'data_compra',
             'situacao',
+            'sku',
             'produto',
             'preco_unitario',
             'quantidade_produto',

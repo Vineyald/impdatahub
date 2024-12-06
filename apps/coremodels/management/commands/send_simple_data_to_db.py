@@ -26,12 +26,12 @@ class Command(BaseCommand):
     REQUIRED_FIELDS = {
         'Produtos': ['sku', 'descricao'],
         'Clientes': ['id', 'nome'],
-        'Vendas': ['numero', 'loja'],
+        'Vendas': ['numero', 'loja', 'data_compra'],
     }
 
     COLUMN_MAPPINGS = {
         'Produtos': {
-            'código (SKU)': 'sku',
+            'código (sku)': 'sku',
             'descrição': 'descricao',
             'unidade': 'unidade',
             'preço': 'preco',
@@ -59,7 +59,7 @@ class Command(BaseCommand):
             'limite de crédito': 'limite_credito'
         },
         'Vendas': {
-            'número': 'numero',  # Add this line
+            'número': 'numero',
             'data da venda': 'data_compra',
             'e-commerce': 'canal_venda',
             'situação da venda': 'situacao',
@@ -119,8 +119,14 @@ class Command(BaseCommand):
         return self.COLUMN_MAPPINGS.get(model.__name__)
 
     def load_csv(self, csv_file):
+        """
+        Load the CSV file and normalize column names.
+        """
         try:
-            return pd.read_csv(csv_file, encoding='utf-8', low_memory=False)
+            df = pd.read_csv(csv_file, encoding='utf-8', low_memory=False)
+            # Normalize columns by stripping and lowercasing
+            df.columns = [col.strip().lower() for col in df.columns]
+            return df
         except Exception as e:
             logger.error(f'Erro ao carregar CSV: {e}')
             raise
@@ -129,14 +135,15 @@ class Command(BaseCommand):
         """
         Validate that the CSV columns match the expected column mapping.
         """
-        df_columns = {col.strip().lower(): col for col in df.columns}
-        expected_columns = {k.strip().lower(): k for k in column_mapping}
+        # Normalize the expected column names for comparison
+        expected_columns = {k.lower(): v for k, v in column_mapping.items()}
+        df_columns = {col.lower() for col in df.columns}
 
-        missing_columns = expected_columns.keys() - df_columns.keys()
+        missing_columns = set(expected_columns.keys()) - df_columns
         if missing_columns:
             raise ValueError(f"Missing required columns: {', '.join(missing_columns)}")
 
-        extra_columns = df_columns.keys() - expected_columns.keys()
+        extra_columns = df_columns - set(expected_columns.keys())
         if extra_columns:
             logger.warning(f"Extra columns in CSV: {', '.join(extra_columns)}")
 
@@ -228,8 +235,14 @@ class Command(BaseCommand):
             if record_data is None:
                 continue
 
+            # Debugging logs for missing fields
+            missing_fields = [field for field in unique_fields if field not in record_data]
+            if missing_fields:
+                logger.error(f"Row {index}: Missing required unique fields: {missing_fields}")
+                continue  # Skip rows with missing unique fields
+
             unique_key = tuple(
-                normalize_value(record_data[field]) for field in unique_fields
+                normalize_value(record_data.get(field)) for field in unique_fields
             )
 
             if unique_key in processed_unique_keys:
@@ -248,12 +261,12 @@ class Command(BaseCommand):
 
         return new_records, updated_records
 
-
     def process_row(self, mapping, row, model):
         """Process a single row of data from the CSV and clean it based on the model fields."""
 
         data = {}
         for csv_column, model_field in mapping.items():
+            # Normalize CSV column name to match with column_mapping
             csv_column = csv_column.lower().strip()
             if csv_column in row:
                 raw_value = row[csv_column]
@@ -263,6 +276,9 @@ class Command(BaseCommand):
                     cleaned_value = cleaned_value or 'Pdv'
 
                 data[model_field] = cleaned_value
+
+        # Debugging logs for processed data
+        logger.debug(f"Processed row data: {data}")
         return data
 
     def clean_value(self, field_name, model, value):
