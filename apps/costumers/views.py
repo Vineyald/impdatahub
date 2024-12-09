@@ -94,6 +94,10 @@ def all_inactive_clients_with_pdv_sales(request):
                     filter=Q(compras_cliente__venda__canal_venda="Pdv") & ~Q(compras_cliente__venda__situacao="Cancelado")
                 ),
                 Value(None)  # Default value will be None for easier filtering
+            ),
+            rota_cidade=Coalesce(
+                "rota__nome_rota",
+                Value(None)
             )
         ).exclude(
             nome__iexact="Consumidor Final"
@@ -255,6 +259,14 @@ def all_clients_with_pdv_sales(request):
                     filter=~Q(compras_cliente__venda__situacao="Cancelado")
                 ),
                 Value(None)
+            ),
+            canal=Coalesce(
+                "compras_cliente__venda__canal_venda",
+                Value(None)
+            ),
+            rota_cidade=Coalesce(
+                "rota__nome_rota",
+                Value(None)
             )
         ).exclude(
             nome__iexact="Consumidor Final"
@@ -281,7 +293,7 @@ def all_clients_with_pdv_sales(request):
                     "celular": cliente.celular,
                     "fone": cliente.fone,
                     "cep": cliente.cep,
-                    "rota": cliente.rota,
+                    "rota": cliente.rota_cidade,
                     "endereco": cliente.endereco,
                     "numero": cliente.numero,
                     "complemento": cliente.complemento,
@@ -293,7 +305,8 @@ def all_clients_with_pdv_sales(request):
                     "contribuinte": cliente.contribuinte,
                     "codigo_regime_tributario": cliente.codigo_regime_tributario,
                     "limite_credito": cliente.limite_credito,
-                    "ultima_compra": cliente.ultima_compra
+                    "ultima_compra": cliente.ultima_compra,
+                    "canal": cliente.canal,
                 },
                 "purchases": [
                     {
@@ -304,7 +317,6 @@ def all_clients_with_pdv_sales(request):
                         "valor_desconto": purchase.valor_desconto,
                         "frete": purchase.frete,
                         "preco_final": purchase.preco_final,
-                        "canal": purchase.venda.canal_venda,
                     }
                     for purchase in cliente.compras
                 ] if cliente.compras else [],  # Handle clients with no purchases

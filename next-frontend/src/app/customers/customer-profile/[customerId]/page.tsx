@@ -35,7 +35,7 @@ interface ClientInfo {
   celular: string;
   fone: string;
   cep: string;
-  rota: string;
+  nome_rota: string;
   endereco: string;
   numero: string;
   complemento: string;
@@ -62,6 +62,7 @@ interface PurchasesData {
   frete: number;
   preco_final: number;
   situacao: string;
+ 
 }
 
 export default function ClientProfilePage() {
@@ -163,6 +164,7 @@ export default function ClientProfilePage() {
         Estado: client.estado,
       },
       situacao: {
+        Rota: client.nome_rota,
         Situação: client.situacao,
         Vendedor: client.vendedor,
         Contribuinte: client.contribuinte,

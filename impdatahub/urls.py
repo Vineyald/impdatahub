@@ -27,6 +27,11 @@ from apps.products.views import (
     homePageData,
     ProductInfoView,
 )
+from apps.sells.views import (
+    RotaListView,
+    SingleRouteView,
+    VendasListAPIView,
+)
 from debug_toolbar.toolbar import debug_toolbar_urls
 from django.conf.urls.static import static
 from django.conf import settings
@@ -54,7 +59,7 @@ urlpatterns += [
     path('api/clientes_listagem/', all_clients_with_pdv_sales, name='all_clients_with_pdv_sales'),
 ]
 
-# Autentica o
+# Autenticao
 urlpatterns += [
     path('api/token/', TokenObtainPairView.as_view(), name='token_obtain_pair'),
     path('api/token/refresh/', TokenRefreshView.as_view(), name='token_refresh'),
@@ -73,9 +78,16 @@ urlpatterns += [
     path('api/register/', RegisterUserView.as_view(), name='register'),
 ]
 
+# Vendas
+urlpatterns += [
+    path('api/vendas/', VendasListAPIView.as_view(), name='vendasList'),
+]
+
 # Outras
 urlpatterns += [
     path('api/homepage/', homePageData, name='homePageData'),
+    path('api/rotas/', RotaListView.as_view(), name='rotasList'),
+    path('api/rota/<int:rota_id>/', SingleRouteView.as_view(), name='rotaPage'),
     path('api/ceps_to_latitude/', get_cities_and_coordinates_from_ceps, name='register'),
     path('api/user/', get_user_name, name='user'),
 ]+ debug_toolbar_urls()+static(settings.STATIC_URL, document_root=settings.STATIC_ROOT)

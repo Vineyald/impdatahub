@@ -1,10 +1,11 @@
 from rest_framework import serializers
-from apps.coremodels.models import Clientes, ItemVenda
+from apps.coremodels.models import Clientes, ItemVenda, Rotas
 from django.db.models import Q, Value, Max
 from django.db.models.functions import Coalesce
 
 class ClientSerializer(serializers.ModelSerializer):
     ultima_compra = serializers.SerializerMethodField()
+    nome_rota = serializers.CharField(source='rota.nome_rota', read_only=True)
 
     class Meta:
         model = Clientes

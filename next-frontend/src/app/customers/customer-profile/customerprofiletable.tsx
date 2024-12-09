@@ -26,6 +26,7 @@ interface PurchasesData {
   frete: number;
   preco_final: number;
   situacao: string;
+  preco_desconto?: number;
 }
 
 interface ClientProfileTableProps {
@@ -47,11 +48,18 @@ const ClientProfileTable: React.FC<ClientProfileTableProps> = ({ purchases }) =>
     Cancelado: "danger",
   };
 
+  const calculatedPurchases = useMemo(() => {
+    return purchases.map((purchase) => {
+      const precoDesconto = purchase.preco_unitario - (purchase.preco_unitario * (purchase.valor_desconto / 100));
+      return { ...purchase, preco_desconto: precoDesconto };
+    });
+  }, [purchases]);
+
   // Função de ordenação
   const sortedPurchases = useMemo(() => {
-    return [...purchases].sort((a, b) => {
-      const first = a[sortDescriptor.column as keyof PurchasesData];
-      const second = b[sortDescriptor.column as keyof PurchasesData];
+    return [...calculatedPurchases].sort((a, b) => {
+      const first = a[sortDescriptor.column as keyof PurchasesData] ?? '';
+      const second = b[sortDescriptor.column as keyof PurchasesData] ?? '';
       let cmp = first < second ? -1 : 1;
 
       if (sortDescriptor.direction === "descending") {
@@ -60,7 +68,7 @@ const ClientProfileTable: React.FC<ClientProfileTableProps> = ({ purchases }) =>
 
       return cmp;
     });
-  }, [purchases, sortDescriptor]);
+  }, [calculatedPurchases, sortDescriptor]);
 
   const pages = Math.ceil(sortedPurchases.length / rowsPerPage);
 
@@ -107,7 +115,7 @@ const ClientProfileTable: React.FC<ClientProfileTableProps> = ({ purchases }) =>
             Quantidade
           </TableColumn>
           <TableColumn key="preco_unitario">Preço Unitário</TableColumn>
-          <TableColumn key="valor_desconto">Valor com Desconto</TableColumn>
+          <TableColumn key="preco_desconto" allowsSorting>Valor com Desconto</TableColumn>
           <TableColumn key="valor_total">Preço Total</TableColumn>
           <TableColumn key="valor_frete">Frete</TableColumn>
           <TableColumn key="preco_final" allowsSorting>
@@ -129,11 +137,11 @@ const ClientProfileTable: React.FC<ClientProfileTableProps> = ({ purchases }) =>
                   </Link>
                 </TableCell>
                 <TableCell>{purchase.quantidade_produto}</TableCell>
-                <TableCell>R$ {purchase.preco_unitario}</TableCell>
-                <TableCell>R$ {purchase.valor_desconto}</TableCell>
-                <TableCell>R$ {purchase.valor_total}</TableCell>
-                <TableCell>R$ {purchase.frete}</TableCell>
-                <TableCell>R$ {purchase.preco_final}</TableCell>
+                <TableCell>R$ {Number(purchase.preco_unitario).toFixed(2)}</TableCell>
+                <TableCell>R$ {Number(purchase.preco_desconto).toFixed(2)}</TableCell>
+                <TableCell>R$ {Number(purchase.valor_total).toFixed(2)}</TableCell>
+                <TableCell>R$ {Number(purchase.frete).toFixed(2)}</TableCell>
+                <TableCell>R$ {Number(purchase.preco_final).toFixed(2)}</TableCell>
                 <TableCell>
                   <Chip
                     className="capitalize"

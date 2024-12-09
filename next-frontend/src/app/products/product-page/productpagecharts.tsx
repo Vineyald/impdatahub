@@ -94,6 +94,7 @@ const ProductSalesChart: React.FC = () => {
               marker: {
                 color: '#005f73',
               },
+              hovertemplate: '<b>%{label}</b><br><b>Valor Vendido:</b> R$ %{y:.2f}<extra></extra>',
             },
             {
               x: salesData.months,
@@ -102,6 +103,7 @@ const ProductSalesChart: React.FC = () => {
               name: 'Quantidade vendida',
               line: { color: '#e9d8a6' },
               yaxis: 'y2',
+              hovertemplate: '<br><b>Quantidade Vendida:</b> %{y:.2f}<extra></extra>',
             },
           ]}
           layout={{

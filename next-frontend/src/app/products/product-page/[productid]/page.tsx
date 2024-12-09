@@ -96,7 +96,7 @@ export default function ProductProfilePage() {
     e.preventDefault();
     if (productData) {
       try {
-        const response = await axios.put(`${API_URL}/products/${productData.produto.sku}`, productData);
+        const response = await axios.put(`${API_URL}/products/${productData.produto.sku}/`, productData);
         console.log("Product updated:", response.data);
         localStorage.setItem("productData", JSON.stringify(response.data));
         setIsEditing(false);

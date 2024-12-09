@@ -13,6 +13,7 @@ import {
   Input,
   Select,
   SelectItem,
+  Selection,
   Spacer,
   Link,
   Chip,
@@ -45,7 +46,8 @@ interface ClientInfo {
   codigo_regime_tributario: string;
   limite_credito: number;
   ultima_compra: string | null;
-  dias_inativo?: number; // Calculated field
+  dias_inativo?: number | null; // Calculated field
+  canal: string;
 }
 
 interface Purchase {
@@ -58,7 +60,6 @@ interface Purchase {
   valor_desconto: number;
   frete: number;
   preco_final: number;
-  canal: string;
 }
 
 interface ClientData {
@@ -70,8 +71,8 @@ const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
 const CustomerListTable: React.FC = () => {
   const [clients, setClients] = useState<ClientData[]>([]);
-  const [purchases, setPurchases] = useState<Purchase[]>([]);
-  const [selectedKeys, setSelectedKeys] = useState(new Set<string>());
+  const [selectedTipoPessoa, setSelectedTipoPessoa] = useState<Selection>(new Set([]));
+  const [selectedOrigem, setSelectedOrigem] = useState<Selection>(new Set([]));
   const [, setIsLoading] = useState(true);
   const [page, setPage] = useState(1);
   const rowsPerPage = 50;
@@ -79,14 +80,29 @@ const CustomerListTable: React.FC = () => {
   const [inputValue, setInputValue] = useState('');
 
   const tipoPessoaOptions = [
-    { key: 'F', label: 'Pessoa Física' },
-    { key: 'J', label: 'Pessoa Jurídica' },
+    { key: 'F', label: 'Pessoa Fisica' },
+    { key: 'J', label: 'Pessoa Juridica' },
+  ];
+
+  const origemOptions = [
+    { key: 'mlfull', label: 'Mercado Livre Full' },
+    { key: 'ml', label: 'Mercado Livre' },
+    { key: 'shopee' , label: 'Shopee' },
+    { key: 'pdv', label: 'Pdv' },
   ];
 
   const [sortDescriptor, setSortDescriptor] = useState<SortDescriptor>({
     column: 'nome',
     direction: 'ascending',
   });
+
+  const normalizeString = (str: string | null | undefined): string => {
+    if (!str) return ''; // Return an empty string for null or undefined
+    return str
+      .toLowerCase()
+      .normalize('NFD')
+      .replace(/[\u0300-\u036f]/g, ''); // Removes diacritics
+  };  
 
   const [filters, setFilters] = useState({
     nome: '',
@@ -107,13 +123,21 @@ const CustomerListTable: React.FC = () => {
         const response = await axios.get<ClientData[]>(`${API_URL}/clientes_listagem/`);
         if (Array.isArray(response.data)) {
           const clientInfos = response.data.map((clientData: ClientData) => {
-            return clientData;
+            const lastPurchaseDate = clientData.info.ultima_compra ? new Date(clientData.info.ultima_compra) : null;
+            const daysInactive = lastPurchaseDate ? Math.floor(
+              (new Date().getTime() - lastPurchaseDate.getTime()) / (1000 * 60 * 60 * 24)
+            ) : null;
+            return { ...clientData, info: { ...clientData.info, dias_inativo: daysInactive } };
           });
           setClients(clientInfos);
         } else if (response.data && typeof response.data === 'object') {
-          const dataArray = Object.values(response.data) as ClientData[]; // Access the property that contains the array
+          const dataArray = Object.values(response.data) as ClientData[];
           const clientInfos = dataArray.map((value: ClientData) => {
-            return { info: value.info, purchases: value.purchases }; // Create a new ClientData object
+            const lastPurchaseDate = value.info.ultima_compra ? new Date(value.info.ultima_compra) : null;
+            const daysInactive = lastPurchaseDate ? Math.floor(
+              (new Date().getTime() - lastPurchaseDate.getTime()) / (1000 * 60 * 60 * 24)
+            ) : null;
+            return { info: { ...value.info, dias_inativo: daysInactive }, purchases: value.purchases };
           });
           setClients(clientInfos);
         } else {
@@ -143,6 +167,11 @@ const CustomerListTable: React.FC = () => {
       setSelectedFilters([...selectedFilters, inputValue]);
     }
     setInputValue('');
+  };
+
+  const handleSelectionChange = (keys: Selection, name: string) => {
+    if (name === 'pessoa') setSelectedTipoPessoa(keys);
+    if (name === 'origem') setSelectedOrigem(keys);
   };
 
   const handleInputChange = (value: SetStateAction<string>) => {
@@ -188,7 +217,7 @@ const CustomerListTable: React.FC = () => {
   
     // Apply `selectedFilters` first
     selectedFilters.forEach((filter) => {
-      const product = filter.replace(/^[+-]/, '').toLowerCase(); // Extract the product name
+      const product = normalizeString(filter.replace(/^[+-]/, ''));
       const include = filter.startsWith('+'); // Determine inclusion or exclusion
   
       if (include) {
@@ -206,7 +235,6 @@ const CustomerListTable: React.FC = () => {
       }
     });
 
-  
     // Apply the remaining filters
     return filtered.filter((client) => {
       const {
@@ -215,17 +243,22 @@ const CustomerListTable: React.FC = () => {
         estado,
         situacao,
         vendedor,
-        tipopessoa,
         limiteCreditoMin,
         limiteCreditoMax,
         lastPurchaseStart,
         lastPurchaseEnd,
       } = filters;
-  
+
       const limiteCredito = parseFloat((client.info.limite_credito ?? 0).toString());
       const minCredito = limiteCreditoMin ? parseFloat(limiteCreditoMin) : null;
       const maxCredito = limiteCreditoMax ? parseFloat(limiteCreditoMax) : null;
-  
+
+      const normalizedSelectedTipos = Array.from(selectedTipoPessoa as Set<string>).map(normalizeString);
+      const normalizedTipoPessoa = normalizeString(client.info.tipo_pessoa);
+
+      const normalizedSelectedOrigens = Array.from(selectedOrigem as Set<string>).map(normalizeString);
+      const normalizedOrigem = normalizeString(client.info.canal);
+
       const lastPurchaseDate = client.info.ultima_compra ? new Date(client.info.ultima_compra) : null;
   
       // Apply each filter conditionally
@@ -234,7 +267,8 @@ const CustomerListTable: React.FC = () => {
         (!cidade || (client.info.cidade && client.info.cidade.toLowerCase().includes(cidade.toLowerCase()))) &&
         (!estado || (client.info.estado && client.info.estado.toLowerCase().includes(estado.toLowerCase()))) &&
         (!situacao || (client.info.situacao && client.info.situacao.toLowerCase() === situacao.toLowerCase())) &&
-        (!tipopessoa || tipopessoa.split(',').includes(client.info.tipo_pessoa)) &&
+        (normalizedSelectedTipos.length === 0 || normalizedSelectedTipos.includes(normalizedTipoPessoa)) &&
+        (normalizedSelectedOrigens.length === 0 || normalizedSelectedOrigens.includes(normalizedOrigem)) &&
         (!vendedor || (client.info.vendedor && client.info.vendedor.toLowerCase().includes(vendedor.toLowerCase()))) &&
         (!minCredito || limiteCredito >= minCredito) &&
         (!maxCredito || limiteCredito <= maxCredito) &&
@@ -242,8 +276,7 @@ const CustomerListTable: React.FC = () => {
         (!lastPurchaseEnd || (lastPurchaseDate && lastPurchaseDate <= new Date(lastPurchaseEnd)))
       );
     });
-  }, [clients, filters, selectedFilters]);
-   
+  }, [clients, filters, selectedFilters, selectedTipoPessoa, selectedOrigem]);
 
   const sortedClients = useMemo(() => {
     return [...filteredClients].sort((a, b) => {
@@ -291,9 +324,9 @@ const CustomerListTable: React.FC = () => {
           .replace(/\b\w/g, (l) => l.toUpperCase())}
       </span>
     );
-  }, []);   
+  }, []);  
   
-  console.log(uniqueProducts)
+  console.log(selectedOrigem);
 
   return (
 
@@ -309,8 +342,10 @@ const CustomerListTable: React.FC = () => {
           placeholder="Selecione ou digite um produto para filtrar"
           inputValue={inputValue}
           onInputChange={handleInputChange}
-          onSelectionChange={(key) => {
-            if (key) handleAddFilter();
+          onKeyDown={(e) => {
+            if (e.key === 'Enter') {
+              e.preventDefault();
+            }
           }}
         >
           {(product) => (
@@ -320,16 +355,21 @@ const CustomerListTable: React.FC = () => {
           )}
         </Autocomplete>
         <Button className="col-span-1" onClick={handleAddFilter}>Adicionar Tag</Button>
-
-        <div className="col-span-4 flex flex-wrap gap-2 mt-4">
+        <h1 className="col-span-4 text-lg font-bold">Clique nas tags para mudar a filtragem</h1>
+        <div className="col-span-4 flex flex-wrap gap-2 mt-4 relative">
+          <a>Tags selecionadas:</a>
           {selectedFilters.map((filter, index) => (
             <Chip
-              className="cursor-pointer"
+              className="cursor-pointer transition ease-in-out delay-150 hover:scale-110 duration-300 hover:z-10"
               key={index}
               variant="flat"
               color={getChipColor(filter)}
               onClose={() => handleRemoveFilter(filter)}
               onClick={() => handleChipClick(index)}
+              style={{
+                transformOrigin: 'center center', // Ensures consistent scaling
+                position: 'relative', // To allow for `z-index`
+              }}
             >
               {filter}
             </Chip>
@@ -341,8 +381,20 @@ const CustomerListTable: React.FC = () => {
           placeholder="Digite o nome do cliente"
           value={filters.nome}
           onChange={(e) => handleFilterChange('nome', e.target.value)}
-          className="md:col-span-4"
+          className="md:col-span-3"
         />
+        <Select
+          label="Origem da venda"
+          selectionMode="multiple"
+          placeholder="Selecione um ou mais origens de venda"
+          selectedKeys={selectedOrigem}
+          className="md:col-span-1"
+          onSelectionChange={(keys) => handleSelectionChange(keys, 'origem')}
+        >
+          {origemOptions.map((option) => (
+            <SelectItem key={option.label}>{option.label}</SelectItem>
+          ))}
+        </Select>
         <Input
           label="Cidade"
           type="text"
@@ -355,16 +407,12 @@ const CustomerListTable: React.FC = () => {
           label="Tipo Pessoa"
           selectionMode="multiple"
           placeholder="Selecione um ou mais tipos de pessoa"
-          selectedKeys={selectedKeys}
+          selectedKeys={selectedTipoPessoa}
           className="max-w-xs"
-          onSelectionChange={(keys) => {
-            const selectedKeysArray = Array.from(keys).map(String); // Convert keys to strings
-            setSelectedKeys(new Set(selectedKeysArray)); // Update the selected keys state
-            handleFilterChange('tipopessoa', selectedKeysArray.length > 0 ? selectedKeysArray.join(',') : ''); // Update the filter
-          }}
+          onSelectionChange={(keys) => handleSelectionChange(keys, 'pessoa')}
         >
           {tipoPessoaOptions.map((option) => (
-            <SelectItem key={option.key}>{option.label}</SelectItem>
+            <SelectItem key={option.label}>{option.label}</SelectItem>
           ))}
         </Select>
         <Input
@@ -444,18 +492,11 @@ const CustomerListTable: React.FC = () => {
         }
       >
         <TableHeader>
-          <TableColumn key="nome" allowsSorting>
-            Nome
-          </TableColumn>
-          <TableColumn key="ultima_compra" allowsSorting>
-            Última Compra
-          </TableColumn>
-          <TableColumn key="dias_inativo" allowsSorting>
-            Dias sem comprar
-          </TableColumn>
-          <TableColumn key="tipo_pessoa" allowsSorting>
-            Tipo Pessoa
-          </TableColumn>
+          <TableColumn key="nome" allowsSorting>Nome</TableColumn>
+          <TableColumn key="ultima_compra" allowsSorting>Última Compra</TableColumn>
+          <TableColumn key="dias_inativo" allowsSorting>Dias sem comprar</TableColumn>
+          <TableColumn key="canal" allowsSorting>Origem</TableColumn>
+          <TableColumn key="tipo_pessoa" allowsSorting>Tipo Pessoa</TableColumn>
           <TableColumn key="cidade">Cidade</TableColumn>
           <TableColumn key="estado">Estado</TableColumn>
           <TableColumn key="situacao">Situação</TableColumn>

@@ -136,9 +136,9 @@ export default function App() {
             </DropdownTrigger>
             <DropdownMenu variant="faded" aria-label="Dropdown menu" disabledKeys={["sells_ranking","sells_routes","sells_weekly","sells_resume"]}>
               <DropdownItem key="sells_ranking">Ranking de Compras</DropdownItem>
-              <DropdownItem key="sells_routes">Produtos sem Vendas</DropdownItem>
               <DropdownItem key="sells_weekly">Vendas Semanais</DropdownItem>
-              <DropdownItem key="sells_resume">Relatórios de Produtos</DropdownItem>
+              <DropdownItem key="routes_metrics">Metricas das Rotas</DropdownItem>
+              <DropdownItem key="list_sells" href="/sales/sales-list/">Lista de Vendas</DropdownItem>
             </DropdownMenu>
           </Dropdown>
         </NavbarItem>
@@ -154,8 +154,9 @@ export default function App() {
                     Bem vindo, {userName}
                   </Button>
                 </DropdownTrigger>
-                <DropdownMenu variant="faded" aria-label="Dropdown menu">
+                <DropdownMenu variant="faded" aria-label="Dropdown menu" disabledKeys={["user_mysells"]}>
                   <DropdownItem key="user_mysells">Minhas Vendas</DropdownItem>
+                  <DropdownItem key="routes_list" href="/userpages/routes-list/">Rotas Cadastradas</DropdownItem>
                 </DropdownMenu>
               </Dropdown>
             </NavbarItem>

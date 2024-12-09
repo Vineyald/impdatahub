@@ -34,7 +34,7 @@ class Clientes(models.Model):
 
     # Endereço
     cep = models.CharField(max_length=100)
-    rota = models.CharField(max_length=120, null=True, blank=True)
+    rota = models.ForeignKey('Rotas', on_delete=models.CASCADE, related_name='clientes_rota', null=True, blank=True)
     endereco = models.CharField(max_length=255)
     numero = models.CharField(max_length=100, null=True, blank=True)
     complemento = models.CharField(max_length=255, null=True, blank=True)
@@ -185,6 +185,28 @@ class ItemVenda(models.Model):
     def __str__(self):
         return f"Item {self.produto} do pedido {self.venda}"
 
+'''
+==========================================================
+                    Rotas Models
+==========================================================
+'''
+
+class Rotas(models.Model):
+    id = models.AutoField(primary_key=True)
+    nome_rota = models.CharField(max_length=255)
+    dia_semana = models.IntegerField()
+    Numero_rota = models.IntegerField()
+
+    def __str__(self):
+        return self.nome_rota
+    
+class CidadesRotas(models.Model):
+    id = models.AutoField(primary_key=True)
+    rota = models.ForeignKey('Rotas', on_delete=models.CASCADE, related_name='cidades_rota')
+    cidade = models.CharField(max_length=255)
+
+    def __str__(self):
+        return self.cidade
     
 '''
 ==========================================================

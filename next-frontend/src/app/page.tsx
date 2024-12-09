@@ -22,6 +22,12 @@ interface Metrics {
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
+// Utility function to convert date format to dd-mm-yyyy
+const formatDateToDDMMYYYY = (date: string): string => {
+  const [year, month, day] = date.split('-');
+  return `${day}-${month}-${year}`;
+};
+
 export default function Home() {
   const [metrics, setMetrics] = useState<Metrics | null>(null);
   const [startDate, setStartDate] = useState('01-01-2024'); // Initial default
@@ -67,20 +73,15 @@ export default function Home() {
       <div className="flex gap-4 mb-4">
         <Input
           type="date"
-          label="Data Inicial"
-          value={new Date(startDate).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-')}
-          placeholder={new Date(startDate).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-')}
-          onChange={(e) => setStartDate(new Date(e.target.value).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-'))}
-          className="w-full"
+          label="Data inicial"
+          onChange={(e) => setStartDate(formatDateToDDMMYYYY(e.target.value))}
+          className="mr-2"
         />
-        
         <Input
           type="date"
-          label="Data Final"
-          value={new Date(endDate).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-')}
-          placeholder={new Date(endDate).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-')}
-          onChange={(e) => setEndDate(new Date(e.target.value).toLocaleDateString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric' }).replace(/\//g, '-'))}
-          className="w-full"
+          label="Data final"
+          onChange={(e) => setEndDate(formatDateToDDMMYYYY(e.target.value))}
+          className="mr-2"
         />
       </div>
       <div className="grid grid-cols-1 md:grid-cols-9 gap-6">
