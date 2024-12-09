@@ -159,15 +159,14 @@ STATIC_ROOT = os.path.join(BASE_DIR, 'staticfiles')
 DEFAULT_AUTO_FIELD = 'django.db.models.BigAutoField'
 
 import os
-from decouple import config
 
 # Debug: Verifica se as variáveis estão sendo carregadas corretamente
-TINY_OLIST_USERNAME_IMP = config('TINY_OLIST_USERNAME_IMP')
-TINY_OLIST_USERNAME_SERVI = config('TINY_OLIST_USERNAME_SERVI')
-TINY_OLIST_PASSWORD = config('TINY_OLIST_PASSWORD')
-TINY_ACESS_TOKEN_SERVI = config('TINY_ACESS_TOKEN_SERVI')
-TINY_ACESS_TOKEN_IMP = config('TINY_ACESS_TOKEN_IMP')
-ADMINPASS = config('SUPERUSER_PASS')
+TINY_OLIST_USERNAME_IMP = os.getenv('TINY_OLIST_USERNAME_IMP')
+TINY_OLIST_USERNAME_SERVI = os.getenv('TINY_OLIST_USERNAME_SERVI')
+TINY_OLIST_PASSWORD = os.getenv('TINY_OLIST_PASSWORD')
+TINY_ACESS_TOKEN_SERVI = os.getenv('TINY_ACESS_TOKEN_SERVI')
+TINY_ACESS_TOKEN_IMP = os.getenv('TINY_ACESS_TOKEN_IMP')
+ADMINPASS = os.getenv('SUPERUSER_PASS')
 
 from datetime import timedelta
 

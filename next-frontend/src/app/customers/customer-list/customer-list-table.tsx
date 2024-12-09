@@ -1,6 +1,6 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
+import React, { SetStateAction, useState, useEffect, useMemo, useCallback } from 'react';
 import {
   Table,
   TableHeader,
@@ -15,6 +15,10 @@ import {
   SelectItem,
   Spacer,
   Link,
+  Chip,
+  Autocomplete, 
+  AutocompleteItem, 
+  Button,
 } from '@nextui-org/react';
 import axios from 'axios';
 
@@ -65,11 +69,14 @@ interface ClientData {
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
 const CustomerListTable: React.FC = () => {
-  const [clients, setClients] = useState<ClientInfo[]>([]);
+  const [clients, setClients] = useState<ClientData[]>([]);
+  const [purchases, setPurchases] = useState<Purchase[]>([]);
   const [selectedKeys, setSelectedKeys] = useState(new Set<string>());
   const [, setIsLoading] = useState(true);
   const [page, setPage] = useState(1);
   const rowsPerPage = 50;
+  const [selectedFilters, setSelectedFilters] = useState<string[]>([]);
+  const [inputValue, setInputValue] = useState('');
 
   const tipoPessoaOptions = [
     { key: 'F', label: 'Pessoa Física' },
@@ -99,18 +106,18 @@ const CustomerListTable: React.FC = () => {
     try {
         const response = await axios.get<ClientData[]>(`${API_URL}/clientes_listagem/`);
         if (Array.isArray(response.data)) {
-            const clientInfos = response.data.map((clientData: ClientData) => {
-                return clientData.info as ClientInfo;
-            });
-            setClients(clientInfos);
+          const clientInfos = response.data.map((clientData: ClientData) => {
+            return clientData;
+          });
+          setClients(clientInfos);
         } else if (response.data && typeof response.data === 'object') {
-            const dataArray = Object.values(response.data) as ClientData[]; // Access the property that contains the array
-            const clientInfos = dataArray.map((value: ClientData) => {
-              return value.info as ClientInfo;
-            });
-            setClients(clientInfos);
+          const dataArray = Object.values(response.data) as ClientData[]; // Access the property that contains the array
+          const clientInfos = dataArray.map((value: ClientData) => {
+            return { info: value.info, purchases: value.purchases }; // Create a new ClientData object
+          });
+          setClients(clientInfos);
         } else {
-            console.error('Unexpected response data:', response.data);
+          console.error('Unexpected response data:', response.data);
         }
     } catch (error) {
         console.error('Erro ao buscar dados dos clientes:', error);
@@ -123,6 +130,49 @@ const CustomerListTable: React.FC = () => {
     fetchClients();
   }, [fetchClients]);
 
+  const uniqueProducts = useMemo(() => {
+    const allProducts = clients.reduce<string[]>((acc, client) => {
+      const products = client.purchases.map((purchase) => purchase.produto);
+      return [...new Set([...acc, ...products])];
+    }, []);
+    return allProducts;
+  }, [clients]);
+
+  const handleAddFilter = () => {
+    if (inputValue && !selectedFilters.includes(inputValue)) {
+      setSelectedFilters([...selectedFilters, inputValue]);
+    }
+    setInputValue('');
+  };
+
+  const handleInputChange = (value: SetStateAction<string>) => {
+    setInputValue(value);
+  };
+
+  const handleRemoveFilter = (filter: string) => {
+    setSelectedFilters(selectedFilters.filter((f) => f !== filter));
+  };
+
+  const handleChipClick = (index: number) => {
+    setSelectedFilters(prevFilters => {
+      const newFilters = [...prevFilters];
+      let filter = newFilters[index].replace(/^[+-]/, '');
+      if (!newFilters[index].startsWith('+') && !newFilters[index].startsWith('-')) {
+        filter = `+${filter}`;
+      } else if (newFilters[index].startsWith('+')) {
+        filter = `-${filter}`;
+      }
+      newFilters[index] = filter;
+      return newFilters;
+    });
+  };
+
+  const getChipColor = (filter: string) => {
+    if (filter.startsWith('+')) return "success";
+    if (filter.startsWith('-')) return "danger";
+    return "default";
+  };
+
   const handleSortChange = (descriptor: SortDescriptor) => {
     setSortDescriptor(descriptor);
     setPage(1);
@@ -134,7 +184,31 @@ const CustomerListTable: React.FC = () => {
   };
 
   const filteredClients = useMemo(() => {
-    return clients.filter((client) => {
+    let filtered = clients;
+  
+    // Apply `selectedFilters` first
+    selectedFilters.forEach((filter) => {
+      const product = filter.replace(/^[+-]/, '').toLowerCase(); // Extract the product name
+      const include = filter.startsWith('+'); // Determine inclusion or exclusion
+  
+      if (include) {
+        filtered = filtered.filter((client) =>
+          client.purchases?.some((purchase) =>
+            purchase.produto.toLowerCase().includes(product)
+          )
+        );
+      } else {
+        filtered = filtered.filter((client) =>
+          !client.purchases?.some((purchase) =>
+            purchase.produto.toLowerCase().includes(product)
+          )
+        );
+      }
+    });
+
+  
+    // Apply the remaining filters
+    return filtered.filter((client) => {
       const {
         nome,
         cidade,
@@ -148,33 +222,34 @@ const CustomerListTable: React.FC = () => {
         lastPurchaseEnd,
       } = filters;
   
-      const limiteCredito = parseFloat((client.limite_credito ?? 0).toString());
+      const limiteCredito = parseFloat((client.info.limite_credito ?? 0).toString());
       const minCredito = limiteCreditoMin ? parseFloat(limiteCreditoMin) : null;
       const maxCredito = limiteCreditoMax ? parseFloat(limiteCreditoMax) : null;
   
-      const lastPurchaseDate = client.ultima_compra ? new Date(client.ultima_compra) : null;
+      const lastPurchaseDate = client.info.ultima_compra ? new Date(client.info.ultima_compra) : null;
   
-      // Filters
+      // Apply each filter conditionally
       return (
-        (!nome || (client.nome && client.nome.toLowerCase().includes(nome.toLowerCase()))) &&
-        (!cidade || (client.cidade && client.cidade.toLowerCase().includes(cidade.toLowerCase()))) &&
-        (!estado || (client.estado && client.estado.toLowerCase().includes(estado.toLowerCase()))) &&
-        (!situacao || (client.situacao && client.situacao.toLowerCase() === situacao.toLowerCase())) &&
-        (!tipopessoa || tipopessoa.split(',').includes(client.tipo_pessoa)) &&
-        (!vendedor || (client.vendedor && client.vendedor.toLowerCase().includes(vendedor.toLowerCase()))) &&
+        (!nome || (client.info.nome && client.info.nome.toLowerCase().includes(nome.toLowerCase()))) &&
+        (!cidade || (client.info.cidade && client.info.cidade.toLowerCase().includes(cidade.toLowerCase()))) &&
+        (!estado || (client.info.estado && client.info.estado.toLowerCase().includes(estado.toLowerCase()))) &&
+        (!situacao || (client.info.situacao && client.info.situacao.toLowerCase() === situacao.toLowerCase())) &&
+        (!tipopessoa || tipopessoa.split(',').includes(client.info.tipo_pessoa)) &&
+        (!vendedor || (client.info.vendedor && client.info.vendedor.toLowerCase().includes(vendedor.toLowerCase()))) &&
         (!minCredito || limiteCredito >= minCredito) &&
         (!maxCredito || limiteCredito <= maxCredito) &&
         (!lastPurchaseStart || (lastPurchaseDate && lastPurchaseDate >= new Date(lastPurchaseStart))) &&
         (!lastPurchaseEnd || (lastPurchaseDate && lastPurchaseDate <= new Date(lastPurchaseEnd)))
       );
     });
-  }, [clients, filters]);  
+  }, [clients, filters, selectedFilters]);
+   
 
   const sortedClients = useMemo(() => {
     return [...filteredClients].sort((a, b) => {
-      const first = a[sortDescriptor.column as keyof ClientInfo] ?? '';
-      const second = b[sortDescriptor.column as keyof ClientInfo] ?? '';
-
+      const first = a.info[sortDescriptor.column as keyof ClientInfo] ?? '';
+      const second = b.info[sortDescriptor.column as keyof ClientInfo] ?? '';
+  
       let cmp = first < second ? -1 : 1;
       if (sortDescriptor.direction === 'descending') {
         cmp *= -1;
@@ -216,13 +291,50 @@ const CustomerListTable: React.FC = () => {
           .replace(/\b\w/g, (l) => l.toUpperCase())}
       </span>
     );
-  }, []);    
+  }, []);   
+  
+  console.log(uniqueProducts)
 
   return (
 
     <div>
       {/* Filters */}
-      <div className="filters md:grid md:grid-cols-4 md:gap-4">
+      <div className="filters grid md:grid-cols-4 md:gap-4">
+        <h1 className="col-span-4 text-lg font-bold mb-4">Filtrar clientes por item comprado</h1>
+        <Autocomplete
+          allowsCustomValue={true}
+          className="mb-4 col-span-3"
+          defaultItems={uniqueProducts.map((product) => ({ key: product }))}
+          label="Filtrar por produtos comprados"
+          placeholder="Selecione ou digite um produto para filtrar"
+          inputValue={inputValue}
+          onInputChange={handleInputChange}
+          onSelectionChange={(key) => {
+            if (key) handleAddFilter();
+          }}
+        >
+          {(product) => (
+            <AutocompleteItem key={product.key}>
+              {product.key}
+            </AutocompleteItem>
+          )}
+        </Autocomplete>
+        <Button className="col-span-1" onClick={handleAddFilter}>Adicionar Tag</Button>
+
+        <div className="col-span-4 flex flex-wrap gap-2 mt-4">
+          {selectedFilters.map((filter, index) => (
+            <Chip
+              className="cursor-pointer"
+              key={index}
+              variant="flat"
+              color={getChipColor(filter)}
+              onClose={() => handleRemoveFilter(filter)}
+              onClick={() => handleChipClick(index)}
+            >
+              {filter}
+            </Chip>
+          ))}
+        </div>
         <Input
           label="Nome"
           type="text"
@@ -352,9 +464,9 @@ const CustomerListTable: React.FC = () => {
         </TableHeader>
         <TableBody items={paginatedClients}>
           {(client) => (
-            <TableRow key={client.id}>
+            <TableRow key={client.info.id}>
               {(columnKey) => (
-                <TableCell>{renderCell(client, columnKey as keyof ClientInfo)}</TableCell>
+                <TableCell>{renderCell(client.info, columnKey as keyof ClientInfo)}</TableCell>
               )}
             </TableRow>
           )}

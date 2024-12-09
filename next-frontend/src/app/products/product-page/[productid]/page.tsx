@@ -28,6 +28,7 @@ interface Venda {
   quantidade: number;
   id_cliente: number;
   nome_cliente: string;
+  valor_total: number;
 }
 
 interface Produto {

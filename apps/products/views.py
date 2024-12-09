@@ -47,22 +47,20 @@ class ProductDetailView(APIView):
     def get(self, request, sku):
         print(f"GET /api/products/{sku}")
         try:
-            # Use select_related to fetch related fields in a single query
             produto = Produtos.objects.select_related().get(sku=sku)
 
-            # Prefetch related sales and clients with necessary fields only
             vendas = ItemVenda.objects.filter(produto=produto).select_related(
-                'venda', 'cliente'
+                'venda', 'cliente', 'itemvenda'
             ).annotate(
                 id_venda=F('venda__id'),
                 data_compra=F('venda__data_compra'),
                 nome_cliente=F('cliente__nome'),
-                id_cliente=F('cliente__id')
+                id_cliente=F('cliente__id'),
+                #valor_total=F('preco_final')  # Use F() expression to reference preco_final field
             ).values(
-                'id_venda', 'data_compra', 'quantidade_produto', 'id_cliente', 'nome_cliente'
+                'id_venda', 'data_compra', 'quantidade_produto', 'id_cliente', 'nome_cliente', 'valor_total'
             )
 
-            # Response data
             data = {
                 'produto': {
                     'sku': produto.sku,
@@ -86,7 +84,6 @@ class ProductDetailView(APIView):
         except Exception as e:
             print(f"Error retrieving produto {sku}: {str(e)}")
             return Response({'error': 'Internal server error', 'details': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
     def put(self, request, sku):
         print(f"PUT /api/products/{sku}")
         try:
@@ -174,51 +171,49 @@ def homePageData(request):
 
 class ProductInfoView(APIView):
     def get(self, request):
-        print("GET /api/products")
+        print("GET /api/products-list")
         try:
-            # Prefetch related sales and clients without using .values()
+            # Configurar Prefetch para itens de venda
             item_vendas_prefetch = Prefetch(
-                'itemvenda_set',
+                'itens_produto',  # Utilize o related_name no modelo Produtos
                 queryset=ItemVenda.objects.select_related('venda', 'cliente').annotate(
                     id_venda=F('venda__id'),
                     data_compra=F('venda__data_compra'),
                     nome_cliente=F('cliente__nome'),
                     id_cliente=F('cliente__id'),
+                    numero_vendas=Count('id_item_venda'),
+                    total_vendido=Sum('quantidade_produto')
                 ),
                 to_attr='prefetched_vendas'
             )
 
-            # Fetch all products and prefetch sales
-            produtos = Produtos.objects.all().select_related().prefetch_related(item_vendas_prefetch)
+            # Buscar produtos com pré-carregamento
+            produtos = Produtos.objects.all().prefetch_related(item_vendas_prefetch)
 
-            # Prepare the response data
-            data = {
-                'produtos': []
-            }
+            # Preparar a resposta
+            data = {'produtos': []}
 
             for produto in produtos:
-                # Add product details
                 produto_data = {
                     'sku': produto.sku,
                     'descricao': produto.descricao,
                     'preco': str(produto.preco),
-                    'preco_promocional': str(produto.preco_promocional) if produto.preco_promocional else None,
                     'estoque_disponivel': str(produto.estoque_disponivel),
-                    'unidade': produto.unidade,
                     'custo': str(produto.custo),
+                    'total_vendido': str(sum(venda.total_vendido for venda in produto.prefetched_vendas)),
+                    'numero_vendas': str(len(produto.prefetched_vendas)),
+                    'valor_total_vendido': None,
                     'vendas': []
                 }
-
-                # Process preloaded sales data
+            
                 for venda in produto.prefetched_vendas:
                     produto_data['vendas'].append({
-                        'id_venda': venda.id_venda,
                         'data_compra': venda.data_compra,
-                        'quantidade_produto': venda.quantidade_produto,
-                        'id_cliente': venda.id_cliente,
-                        'nome_cliente': venda.nome_cliente,
+                        'valor_vendido': venda.valor_total,
                     })
-
+            
+                produto_data['valor_total_vendido'] = str(sum(venda['valor_vendido'] for venda in produto_data['vendas']))
+            
                 data['produtos'].append(produto_data)
 
             print("Returning response data for all products")
@@ -227,6 +222,3 @@ class ProductInfoView(APIView):
         except Exception as e:
             print(f"Error retrieving products: {str(e)}")
             return Response({'error': 'Internal server error', 'details': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
-
-
-

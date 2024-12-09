@@ -10,6 +10,7 @@ interface Venda {
   quantidade_produto: number;
   id_cliente: number;
   nome_cliente: string;
+  valor_total: number;
 }
 
 interface Produto {
@@ -65,7 +66,7 @@ const ProductSalesChart: React.FC = () => {
           acc[month] = { quantity: 0, value: 0 };
         }
         acc[month].quantity += venda.quantidade_produto;
-        acc[month].value += venda.quantidade_produto * parseFloat(products[0].preco); // Assume price is constant
+        acc[month].value += venda.valor_total;
         return acc;
       }, {});
 
@@ -88,7 +89,7 @@ const ProductSalesChart: React.FC = () => {
               y: salesData.values,
               type: 'bar',
               name: 'Valor em vendas',
-              text: salesData.values.map((value) => value.toFixed(2)),
+              text: salesData.values.map((value) => `R$ ${value.toFixed(2)}`),
               textposition: 'auto',
               marker: {
                 color: '#005f73',

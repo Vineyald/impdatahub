@@ -5,16 +5,31 @@ import axios from 'axios';
 import { Spacer, Card, Skeleton } from '@nextui-org/react';
 import dynamic from 'next/dynamic';
 
+interface Venda {
+  id_venda: number;
+  data_compra: number;
+  quantidade_produto: number;
+  id_cliente: number;
+  nome_cliente: string;
+  valor_vendido: number;
+}
+
 interface ProductInfo {
   sku: string;
   descricao: string;
   preco: number;
-  preco_promocional: number;
+  preco_promocional?: number;
   estoque_disponivel: number;
-  unidade: string;
+  unidade?: string;
   custo: number;
   numero_vendas: number;
   total_vendido: number;
+  valor_total_vendido: number;
+  vendas: Venda[];
+}
+
+interface ProductsData {
+  produtos: ProductInfo[];
 }
 
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
@@ -23,9 +38,6 @@ const VerticalBarChart = dynamic(() => import('./components/vertical-bar-chart')
 const StackedBarChart = dynamic(() => import('./components/stacked-bar-chart'), { ssr: false });
 const PieChart = dynamic(() => import('./components/pie-chart'), { ssr: false });
 const LineChart = dynamic(() => import('./components/line-chart'), { ssr: false });
-const BubbleChart = dynamic(() => import('./components/bubble-chart'), { ssr: false });
-const TreemapChart = dynamic(() => import('./components/treemap-chart'), { ssr: false });
-const RadarChart = dynamic(() => import('./components/radar-chart'), { ssr: false });
 
 export default function MostSoldProducts() {
   const [data, setData] = useState<ProductInfo[] | null>(null);
@@ -40,9 +52,9 @@ export default function MostSoldProducts() {
         if (cachedData && cachedTimestamp && now - parseInt(cachedTimestamp, 10) < 15 * 60 * 1000) {
           setData(JSON.parse(cachedData));
         } else {
-          const response = await axios.get(`${API_URL}/products/`);
-          setData(response.data);
-          localStorage.setItem('productsData', JSON.stringify(response.data));
+          const response = await axios.get<ProductsData>(`${API_URL}/products-list/`);
+          setData(response.data.produtos);
+          localStorage.setItem('productsData', JSON.stringify(response.data.produtos));
           localStorage.setItem('productsDataTimestamp', now.toString());
         }
       } catch (error) {
@@ -76,39 +88,21 @@ export default function MostSoldProducts() {
       </div>
       <Spacer y={5} />
       <div className="grid gap-6 md:grid-cols-6 lg:grid-cols-6 xl:grid-cols-9 md:max-w-5xl xl:max-w-screen-2xl mx-auto">
-        <Card className="p-4 col-span-4 md:col-span-6 xl:col-span-3">
+        <Card className="p-4 col-span-4 md:col-span-6 xl:col-span-9">
           <h2 className="text-xl font-semibold">Vertical Bar Chart</h2>
-          <VerticalBarChart />
+          <LineChart />
         </Card>
-
         <Card className="p-4 col-span-4 md:col-span-6 xl:col-span-3">
           <h2 className="text-xl font-semibold">Stacked Bar Chart</h2>
           <StackedBarChart />
         </Card>
-
         <Card className="p-4 col-span-4 md:col-span-3 xl:col-span-3">
           <h2 className="text-xl font-semibold">Pie/Donut Chart</h2>
           <PieChart />
         </Card>
-
         <Card className="p-4 col-span-4 md:col-span-3 xl:col-span-3">
           <h2 className="text-xl font-semibold">Line Chart</h2>
-          <LineChart />
-        </Card>
-
-        <Card className="p-4 col-span-4 md:col-span-6 xl:col-span-3">
-          <h2 className="text-xl font-semibold">Bubble Chart</h2>
-          <BubbleChart />
-        </Card>
-
-        <Card className="p-4 col-span-4 md:col-span-6 xl:col-span-3">
-          <h2 className="text-xl font-semibold">Treemap</h2>
-          <TreemapChart />
-        </Card>
-
-        <Card className="p-4 col-span-4 md:col-span-6 xl:col-span-3">
-          <h2 className="text-xl font-semibold">Radar Chart</h2>
-          <RadarChart />
+          <VerticalBarChart />
         </Card>
       </div>
     </div>
