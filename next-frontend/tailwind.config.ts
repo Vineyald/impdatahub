@@ -1,5 +1,5 @@
 import type { Config } from "tailwindcss";
-import {nextui} from "@nextui-org/react";
+import { nextui } from "@nextui-org/react";
 
 const config: Config = {
   content: [
@@ -17,9 +17,13 @@ const config: Config = {
     },
     container: {
       center: true,
-    }
+    },
   },
   darkMode: "class",
-  plugins: [nextui()]
+  plugins: [
+    nextui(),
+    require('tailwindcss'),
+  ],
 };
+
 export default config;

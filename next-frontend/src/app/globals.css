@@ -2,3 +2,62 @@
 @tailwind components;
 @tailwind utilities;
 
+.card-style {
+    @apply bg-transparent relative rounded-lg bg-gradient-to-br from-blue-200/20 from-10% to-90%; /* Ensure the parent is positioned relative and rounded */
+    border: 1px solid transparent; /* Base border to maintain structure */
+}
+
+.card-style::before {
+    content: '';
+    position: absolute;
+    inset: 0; /* Fill the parent */
+    border-radius: inherit; /* Match the parent's border-radius */
+    padding: 1px; /* Controls border thickness */
+    background: linear-gradient(to bottom right, rgba(255, 255, 255, 0.377) 10%, transparent 40%, transparent 60%);
+    -webkit-mask: 
+        linear-gradient(white, white) content-box, 
+        linear-gradient(white, white);
+    -webkit-mask-composite: destination-out;
+    mask-composite: exclude;
+    pointer-events: none; /* Allow interaction with content */
+}
+
+.card-style-primary {
+    @apply bg-transparent relative rounded-lg bg-gradient-to-br from-[#54CEEE] from-20% to-80% to-[#35A4E0]; /* Ensure the parent is positioned relative and rounded */
+    border: 1px solid transparent; /* Base border to maintain structure */
+}
+
+.card-style-secondary {
+    @apply bg-transparent relative rounded-lg bg-gradient-to-br from-orange-400 from-0% to-50% to-orange-600; /* Ensure the parent is positioned relative and rounded */
+    border: 1px solid transparent; /* Base border to maintain structure */
+}
+
+.card-style-danger {
+    @apply bg-transparent relative rounded-lg bg-gradient-to-br from-red-500 from-0% to-50% to-red-700; /* Ensure the parent is positioned relative and rounded */
+    border: 1px solid transparent; /* Base border to maintain structure */
+}
+
+.grain {
+  background-image: 
+    url('./images/img-noise.png'), 
+    linear-gradient(to bottom right, #1f1d25, #191722);
+  background-size: 200px 200px, 100%;
+  background-repeat: repeat, no-repeat;
+  background-blend-mode: overlay;
+  background-position: center;
+}
+
+html {
+    height: 100%;
+}
+
+body {
+    min-height: 100%; /* Ensures the body is at least as tall as the viewport */
+    margin: 0;       /* Removes default margin */
+    padding: 0;      /* Removes default padding */
+    box-sizing: border-box; /* Ensures padding and borders are included in size calculations */
+}
+
+
+  
+

@@ -18,28 +18,30 @@ class RotaListView(APIView):
             6: "sexta",
         }
 
-        # Query all routes
+        # Query all routes with prefetching for related cities
         routes = Rotas.objects.prefetch_related('cidades_rota').all()
 
-        # Build the JSON response
-        data = {}
+        # Build the JSON response as a list of routes
+        data = []  # Initialize an empty list to hold all routes
         for route in routes:
             # Fetch route details
             route_name = route.nome_rota
             route_number = route.Numero_rota
             route_day = days_of_week.get(route.dia_semana, "unknown")
-            
+
             # Fetch associated cities
             cities = list(route.cidades_rota.values_list('cidade', flat=True))
 
             # Add route data to JSON structure
-            data[route_name] = {
+            data.append({
                 "id": route.id,
+                "rota_nome": route_name,
                 "numero_rota": route_number,
                 "dia_semana": route_day,
                 "cidades": cities,
-            }
+            })
 
+        # Return the full list of routes as a JSON response
         return Response(data)
     
 class SingleRouteView(APIView):

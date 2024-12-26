@@ -11,7 +11,7 @@ from apps.coremodels.views import (
 )
 from apps.costumers.views import (
     client_profile_api,
-    all_inactive_clients_with_pdv_sales,
+    InactiveClientsWithPdvSales,
     get_cities_and_coordinates_from_ceps,
     all_clients_with_pdv_sales,
     top_20_clients
@@ -53,7 +53,7 @@ urlpatterns += [
 
 # Clientes
 urlpatterns += [
-    path('api/clientes_inativos/', all_inactive_clients_with_pdv_sales, name='clientes_inativos_pdv_api'),
+    path('api/clientes_inativos/', InactiveClientsWithPdvSales.as_view(), name='clientes_inativos_pdv_api'),
     path('api/clientes_ranking/', top_20_clients, name='clientes_ranking'),
     path('api/clientes/<int:client_id>/', client_profile_api, name='client_profile_api'),
     path('api/clientes_listagem/', all_clients_with_pdv_sales, name='all_clients_with_pdv_sales'),

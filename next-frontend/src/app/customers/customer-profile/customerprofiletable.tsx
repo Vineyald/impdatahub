@@ -1,18 +1,9 @@
 'use client';
 
-import React, { useState, useMemo } from 'react';
-import {
-  Table,
-  TableHeader,
-  TableColumn,
-  TableBody,
-  TableRow,
-  TableCell,
-  Pagination,
-  SortDescriptor,
-  Chip,
-  Link,
-} from "@nextui-org/react";
+import React, { useState, useMemo, useCallback } from 'react';
+import TableHandler from '@/components/table-components/table';
+import { SortDescriptor, Chip, Link} from '@nextui-org/react';
+import { applyFilters } from '@/components/utility/process-filters';
 
 interface PurchasesData {
   id: string;
@@ -34,20 +25,20 @@ interface ClientProfileTableProps {
 }
 
 const ClientProfileTable: React.FC<ClientProfileTableProps> = ({ purchases }) => {
-  const [page, setPage] = useState(1);
+  const [filteredPurchases, setFilteredPurchases] = useState<PurchasesData[]>(purchases);
   const [sortDescriptor, setSortDescriptor] = useState<SortDescriptor>({
-    column: 'numero_venda',
-    direction: 'ascending',
+    column: 'data_compra',
+    direction: 'descending',
   });
-  const rowsPerPage = 10;
 
   const statusColorMap: { [key: string]: "success" | "danger" | "warning" | "primary" | "default" } = {
     Entregue: "success",
-    Envidado: "warning",
+    Enviado: "warning",
     Faturado: "warning",
     Cancelado: "danger",
   };
 
+  // Função de ordenação e cálculo de desconto
   const calculatedPurchases = useMemo(() => {
     return purchases.map((purchase) => {
       const precoDesconto = purchase.preco_unitario - (purchase.preco_unitario * (purchase.valor_desconto / 100));
@@ -55,108 +46,101 @@ const ClientProfileTable: React.FC<ClientProfileTableProps> = ({ purchases }) =>
     });
   }, [purchases]);
 
-  // Função de ordenação
-  const sortedPurchases = useMemo(() => {
-    return [...calculatedPurchases].sort((a, b) => {
-      const first = a[sortDescriptor.column as keyof PurchasesData] ?? '';
-      const second = b[sortDescriptor.column as keyof PurchasesData] ?? '';
-      let cmp = first < second ? -1 : 1;
+  // Aplicando filtros
+    const handleFilterChange = useCallback(
+      (filterStates: Record<string, string | boolean | [(string | undefined)?, (string | undefined)?]>) => {
+        const refinedStates = Object.entries(filterStates).reduce((acc, [key, value]) => {
+          acc[key] = Array.isArray(value) ? value.map(String) : [String(value)];
+          return acc;
+        }, {} as Record<string, string[]>);
+  
+        const filteredData = applyFilters<PurchasesData>(calculatedPurchases, refinedStates);
+        setFilteredPurchases(filteredData);
+      },
+      [calculatedPurchases]
+    );
 
-      if (sortDescriptor.direction === "descending") {
-        cmp *= -1;
-      }
-
-      return cmp;
-    });
-  }, [calculatedPurchases, sortDescriptor]);
-
-  const pages = Math.ceil(sortedPurchases.length / rowsPerPage);
-
-  const paginatedPurchases = useMemo(() => {
-    const start = (page - 1) * rowsPerPage;
-    const end = start + rowsPerPage;
-    return sortedPurchases.slice(start, end);
-  }, [page, sortedPurchases]);
-
-  const handleSortChange = (descriptor: SortDescriptor) => {
-    setSortDescriptor(descriptor);
-    setPage(1); // Reset para a primeira página ao mudar a ordenação
+  // Format Brazilian Date (DD/MM/YYYY)
+  const formatDate = (date: string) => {
+    const parsedDate = new Date(date);
+    return new Intl.DateTimeFormat('pt-BR', {
+      day: '2-digit',
+      month: '2-digit',
+      year: 'numeric',
+    }).format(parsedDate);
   };
+
+  // Função de renderização das células
+  const renderCell = useCallback((purchase: PurchasesData, columnKey: keyof PurchasesData) => {
+    switch (columnKey) {
+      case 'data_compra':
+        return <span>{formatDate(purchase.data_compra)}</span>;
+      case 'produto':
+        return (
+          <Link
+            href={`/products/product-page/${purchase.sku}`}
+            className="text-pink-600 decoration-2 hover:underline decoration-pink-500 text-inherit"
+          >
+            {purchase.produto}
+          </Link>
+        );
+      
+      case 'preco_desconto':
+        return (
+          <span>
+            R$ {purchase.preco_desconto ? purchase.preco_desconto.toFixed(2) : 'N/A'}
+          </span>
+        )
+      case 'valor_total':
+      case 'preco_unitario':
+      case 'preco_final':
+        return (
+          <span>
+            R$ {Number(purchase[columnKey as keyof PurchasesData]).toFixed(2)}
+          </span>
+        );
+      case 'situacao':
+        const statusColor = statusColorMap[purchase.situacao] || "default"; // Fallback seguro
+        return <Chip color={statusColor} size="sm" variant="flat">{purchase.situacao}</Chip>;
+      default:
+        return <span>{purchase[columnKey as keyof PurchasesData] ?? 'N/A'}</span>;
+    }
+  }, [statusColorMap]);
+
+  // Definindo colunas visíveis
+  const visibleColumns = useMemo(
+    () => [
+      { columnKey: 'id', label: 'Número da Venda', visible: true, sortable: true },
+      { columnKey: 'data_compra', label: 'Data da Compra', visible: true, sortable: true },
+      { columnKey: 'produto', label: 'Produto', visible: true, sortable: true },
+      { columnKey: 'quantidade_produto', label: 'Quantidade', visible: true, sortable: true },
+      { columnKey: 'preco_unitario', label: 'Preço Unitário', visible: true, sortable: true },
+      { columnKey: 'preco_desconto', label: 'Valor com Desconto', visible: true, sortable: true },
+      { columnKey: 'valor_total', label: 'Preço Total', visible: true, sortable: true },
+      { columnKey: 'frete', label: 'Frete', visible: true, sortable: true },
+      { columnKey: 'preco_final', label: 'Preço Final', visible: true, sortable: true },
+      { columnKey: 'situacao', label: 'Situação', visible: true, sortable: true },
+    ],
+    []
+  );
 
   return (
     <div>
-      <Table
-        aria-label="Tabela de compras com paginação e ordenação"
+      <TableHandler
+        data={filteredPurchases}
+        idKey={['id', 'produto']} // Pass as an array
+        filters={[
+          { field: 'input', controlfield: 'produto', placeholder: 'Filtrar pelo produto', className: 'col-span-8' },
+          { field: 'input', controlfield: 'situacao', placeholder: 'Filtrar pela situação', className: 'col-span-8' },
+          { field: 'comparator', type: 'date', controlfield: 'data_compra', placeholder: 'Filtrar pela data', className: 'col-span-8' },
+        ]}
+        columns={visibleColumns}
+        className="mx-auto md:w-[95%]"
         sortDescriptor={sortDescriptor}
-        onSortChange={handleSortChange}
-        bottomContent={
-          <div className="flex w-full justify-center">
-            <Pagination
-              isCompact
-              showControls
-              color="secondary"
-              page={page}
-              total={pages}
-              onChange={(page) => setPage(page)}
-            />
-          </div>
-        }
-        className="md:w-full 2xl:max-w-screen-2xl mx-auto"
-      >
-        <TableHeader>
-          <TableColumn key="numero_venda" allowsSorting className='max-w-32'>
-            Número da Venda
-          </TableColumn>
-          <TableColumn key="data_compra" allowsSorting className='max-w-32'>
-            Data da Compra
-          </TableColumn>
-          <TableColumn key="produto" className='max-w-32'>Produto</TableColumn>
-          <TableColumn key="quantidade_produto" allowsSorting>
-            Quantidade
-          </TableColumn>
-          <TableColumn key="preco_unitario">Preço Unitário</TableColumn>
-          <TableColumn key="preco_desconto" allowsSorting>Valor com Desconto</TableColumn>
-          <TableColumn key="valor_total">Preço Total</TableColumn>
-          <TableColumn key="valor_frete">Frete</TableColumn>
-          <TableColumn key="preco_final" allowsSorting>
-            Preço Final
-          </TableColumn>
-          <TableColumn key="situacao">Situação</TableColumn>
-        </TableHeader>
-        <TableBody items={paginatedPurchases}>
-          {(purchase) => {
-            const statusColor =
-              statusColorMap[purchase.situacao] || "default"; // Fallback seguro
-            return (
-              <TableRow key={`${purchase.id}-${purchase.produto}`}>
-                <TableCell>{purchase.id}</TableCell>
-                <TableCell>{purchase.data_compra}</TableCell>
-                <TableCell>
-                  <Link className='decoration-2 hover:underline decoration-pink-500 text-inherit' href={`/products/product-page/${purchase.sku}`}>
-                    {purchase.produto}
-                  </Link>
-                </TableCell>
-                <TableCell>{purchase.quantidade_produto}</TableCell>
-                <TableCell>R$ {Number(purchase.preco_unitario).toFixed(2)}</TableCell>
-                <TableCell>R$ {Number(purchase.preco_desconto).toFixed(2)}</TableCell>
-                <TableCell>R$ {Number(purchase.valor_total).toFixed(2)}</TableCell>
-                <TableCell>R$ {Number(purchase.frete).toFixed(2)}</TableCell>
-                <TableCell>R$ {Number(purchase.preco_final).toFixed(2)}</TableCell>
-                <TableCell>
-                  <Chip
-                    className="capitalize"
-                    color={statusColor}
-                    size="sm"
-                    variant="flat"
-                  >
-                    {purchase.situacao}
-                  </Chip>
-                </TableCell>
-              </TableRow>
-            );
-          }}
-        </TableBody>
-      </Table>
+        onSortChange={setSortDescriptor}
+        onFilterStatesChange={handleFilterChange}
+        renderCell={(item: PurchasesData, columnKey: keyof PurchasesData) => renderCell(item, columnKey)}
+      />
     </div>
   );
 };

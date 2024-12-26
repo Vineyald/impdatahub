@@ -1,21 +1,12 @@
 'use client';
 
-import React, { useState, useEffect, useMemo, useCallback } from 'react';
-import {
-  Table,
-  TableHeader,
-  TableColumn,
-  TableBody,
-  TableRow,
-  TableCell,
-  Pagination,
-  SortDescriptor,
-  Input,
-  Spacer,
-  Link,
-} from '@nextui-org/react';
+import React, { useState, useEffect, useCallback } from 'react';
 import axios from 'axios';
+import TableHandler from '@/components/table-components/table';
+import { SortDescriptor, Link, Spacer } from '@nextui-org/react';
+import { applyFilters } from '@/components/utility/process-filters';
 
+// Define the Product interface
 interface ProductInfo {
   sku: string;
   descricao: string;
@@ -28,30 +19,20 @@ interface ProductInfo {
   total_vendido: number;
 }
 
+// Define the API URL
 const API_URL = process.env.NEXT_PUBLIC_API_URL;
 
+// ProductListTable Component
 const ProductListTable: React.FC = () => {
   const [products, setProducts] = useState<ProductInfo[]>([]);
-  const [, setIsLoading] = useState(true);
-  const [page, setPage] = useState(1);
-  const rowsPerPage = 50;
-
+  const [filteredProducts, setFilteredProducts] = useState<ProductInfo[]>([]);
   const [sortDescriptor, setSortDescriptor] = useState<SortDescriptor>({
     column: 'descricao',
     direction: 'ascending',
   });
 
-  const [filters, setFilters] = useState({
-    sku: '',
-    descricao: '',
-    precoMin: '',
-    precoMax: '',
-    estoqueMin: '',
-    estoqueMax: '',
-  });
-
+  // Fetch product data from the API
   const fetchProducts = useCallback(async () => {
-    setIsLoading(true);
     try {
       const response = await axios.get<ProductInfo[]>(`${API_URL}/products/`);
       if (Array.isArray(response.data)) {
@@ -60,9 +41,7 @@ const ProductListTable: React.FC = () => {
         console.error('Unexpected response data:', response.data);
       }
     } catch (error) {
-      console.error('Erro ao buscar dados dos produtos:', error);
-    } finally {
-      setIsLoading(false);
+      console.error('Error fetching products:', error);
     }
   }, []);
 
@@ -70,192 +49,76 @@ const ProductListTable: React.FC = () => {
     fetchProducts();
   }, [fetchProducts]);
 
-  const handleSortChange = (descriptor: SortDescriptor) => {
-    setSortDescriptor(descriptor);
-    setPage(1);
-  };
+  // Initial filter application when data is fetched
+  useEffect(() => {
+    setFilteredProducts(applyFilters(products, {}));
+  }, [products]);
 
-  const handleFilterChange = (field: string, value: string) => {
-    setFilters((prev) => ({ ...prev, [field]: value }));
-    setPage(1);
-  };
-
-  const filteredProducts = useMemo(() => {
-    return products.filter((product) => {
-      const { sku, descricao, precoMin, precoMax, estoqueMin, estoqueMax } = filters;
-      const preco = product.preco;
-      const estoque = product.estoque_disponivel;
-
-      const minPreco = precoMin ? parseFloat(precoMin) : null;
-      const maxPreco = precoMax ? parseFloat(precoMax) : null;
-      const minEstoque = estoqueMin ? parseFloat(estoqueMin) : null;
-      const maxEstoque = estoqueMax ? parseFloat(estoqueMax) : null;
-
-      // Filters
-      return (
-        (!sku || product.sku.toLowerCase().includes(sku.toLowerCase())) &&
-        (!descricao || product.descricao.toLowerCase().includes(descricao.toLowerCase())) &&
-        (!minPreco || preco >= minPreco) &&
-        (!maxPreco || preco <= maxPreco) &&
-        (!minEstoque || estoque >= minEstoque) &&
-        (!maxEstoque || estoque <= maxEstoque)
+  // Handle filter changes
+  const handleFilterChange = useCallback(
+    (filterStates: Record<string, string | boolean | [(string | undefined)?, (string | undefined)?]>) => {
+      const refinedStates = Object.fromEntries(
+        Object.entries(filterStates).map(([key, value]) => [key, value])
       );
-    });
-  }, [products, filters]);
+      const filteredData = applyFilters<ProductInfo>(products, refinedStates);
+      setFilteredProducts(filteredData);
+    },
+    [products]
+  );
 
-  const sortedProducts = useMemo(() => {
-    return [...filteredProducts].sort((a, b) => {
-      const first = a[sortDescriptor.column as keyof ProductInfo] ?? '';
-      const second = b[sortDescriptor.column as keyof ProductInfo] ?? '';
-
-      let cmp = first < second ? -1 : 1;
-      if (sortDescriptor.direction === 'descending') {
-        cmp *= -1;
-      }
-      return cmp;
-    });
-  }, [filteredProducts, sortDescriptor]);
-
-  const paginatedProducts = useMemo(() => {
-    const start = (page - 1) * rowsPerPage;
-    const end = start + rowsPerPage;
-    return sortedProducts.slice(start, end);
-  }, [page, sortedProducts]);
-
+  // Render table cell content
   const renderCell = useCallback((product: ProductInfo, columnKey: keyof ProductInfo) => {
     const cellValue = product[columnKey];
-    if (columnKey === 'descricao') {
-      return (
-        <Link
-          href={`/products/product-page/${product.sku}`}
-          className="decoration-2 hover:underline decoration-pink-500 text-inherit"
-        >
-          {(cellValue ?? '')
-            .toString()
-            .toLowerCase()
-            .normalize('NFD')
-            .replace(/[\u0300-\u036f]/g, '')
-            .replace(/\b\w/g, (l) => l.toUpperCase())}
-        </Link>
-      );
+    switch (columnKey) {
+      case 'descricao':
+        return (
+          <Link
+            href={`/products/product-page/${product.sku}`}
+            className="text-blue-600 decoration-2 hover:underline decoration-blue-500 text-inherit"
+          >
+            {cellValue.toString()}
+          </Link>
+        );
+      case 'preco':
+      case 'preco_promocional':
+      case 'custo':
+      case 'total_vendido':
+        return <span>R$ {Number(cellValue).toFixed(2)}</span>;
+      default:
+        return <span>{cellValue?.toString() ?? 'N/A'}</span>;
     }
-    return (
-      <span>
-        {(cellValue ?? '')
-          .toString()
-          .toLowerCase()
-          .normalize('NFD')
-          .replace(/[\u0300-\u036f]/g, '')
-          .replace(/\b\w/g, (l) => l.toUpperCase())}
-      </span>
-    );
-  }, []);   
+  }, []);
+
+  // Define visible columns
+  const visibleColumns = [
+    { columnKey: 'sku', label: 'SKU', visible: true, sortable: true },
+    { columnKey: 'descricao', label: 'Descrição', visible: true, sortable: true },
+    { columnKey: 'preco', label: 'Preço', visible: true, sortable: true },
+    { columnKey: 'estoque_disponivel', label: 'Estoque Disponível', visible: true, sortable: true },
+    { columnKey: 'unidade', label: 'Unidade', visible: true, sortable: false },
+    { columnKey: 'total_vendido', label: 'Total Vendido', visible: true, sortable: true },
+    { columnKey: 'numero_vendas', label: 'Número de Vendas', visible: true, sortable: true },
+  ];
 
   return (
-    <div>
-      {/* Filters */}
-      <div className="filters md:grid md:grid-cols-4 md:gap-4">
-        <Input
-          label="SKU"
-          type="text"
-          placeholder="Digite o SKU do produto"
-          value={filters.sku}
-          onChange={(e) => handleFilterChange('sku', e.target.value)}
-          className="md:col-span-1"
-        />
-        <Input
-          label="Descrição"
-          type="text"
-          placeholder="Digite a descrição do produto"
-          value={filters.descricao}
-          onChange={(e) => handleFilterChange('descricao', e.target.value)}
-          className="md:col-span-3"
-        />
-        <Input
-          type="number"
-          label="Preço Mín."
-          placeholder="Digite o preço mínimo"
-          value={filters.precoMin}
-          className="md:col-span-2"
-          onChange={(e) => handleFilterChange('precoMin', e.target.value)}
-        />
-        <Input
-          type="number"
-          label="Preço Máx."
-          placeholder="Digite o preço máximo"
-          value={filters.precoMax}
-          className="md:col-span-2"
-          onChange={(e) => handleFilterChange('precoMax', e.target.value)}
-        />
-        <Input
-          type="number"
-          label="Estoque Mín."
-          placeholder="Digite o estoque mínimo"
-          value={filters.estoqueMin}
-          className="md:col-span-2"
-          onChange={(e) => handleFilterChange('estoqueMin', e.target.value)}
-        />
-        <Input
-          type="number"
-          label="Estoque Máx."
-          placeholder="Digite o estoque máximo"
-          value={filters.estoqueMax}
-          className="md:col-span-2"
-          onChange={(e) => handleFilterChange('estoqueMax', e.target.value)}
-        />
-      </div>
-
-      {/* Table */}
+    <div className="mx-auto">
       <Spacer y={10} />
-      <Table
-        aria-label="Tabela de Produtos"
+      <TableHandler
+        data={filteredProducts}
+        idKey={['sku', 'descricao']}
+        filters={[
+          { field: 'input', controlfield: 'sku', placeholder: 'Filtre pelo SKU', className: 'col-span-9' },
+          { field: 'input', controlfield: 'descricao', placeholder: 'Filtre pela descrição', className: 'col-span-9' },
+          { field: 'input', controlfield: 'preco', placeholder: 'Preço', className: 'col-span-4' },
+          { field: 'input', controlfield: 'estoque_disponivel', placeholder: 'Estoque Disponível', className: 'col-span-5' },
+        ]}
+        columns={visibleColumns}
+        className="max-w-full"
         sortDescriptor={sortDescriptor}
-        onSortChange={handleSortChange}
-        bottomContent={
-          <Pagination
-            isCompact
-            showControls
-            showShadow
-            color="secondary"
-            page={page}
-            total={Math.ceil(filteredProducts.length / rowsPerPage)}
-            onChange={(page) => setPage(page)}
-          />
-        }
-      >
-        <TableHeader>
-          <TableColumn key="sku" allowsSorting>
-            SKU
-          </TableColumn>
-          <TableColumn key="descricao" allowsSorting>
-            Descrição
-          </TableColumn>
-          <TableColumn key="preco" allowsSorting>
-            Preço
-          </TableColumn>
-          <TableColumn key="estoque_disponivel" allowsSorting>
-            Estoque Disponível
-          </TableColumn>
-          <TableColumn key="unidade">
-            Unidade
-          </TableColumn>
-          <TableColumn key="total_vendido" allowsSorting>
-            Total Vendido
-          </TableColumn>
-          <TableColumn key="numero_vendas" allowsSorting>
-            Número de Vendas
-          </TableColumn>
-        </TableHeader>
-        <TableBody items={paginatedProducts}>
-          {(product) => (
-            <TableRow key={product.sku}>
-              {(columnKey) => (
-                <TableCell>{renderCell(product, columnKey as keyof ProductInfo)}</TableCell>
-              )}
-            </TableRow>
-          )}
-        </TableBody>
-      </Table>
+        onSortChange={setSortDescriptor}
+        onFilterStatesChange={handleFilterChange}
+        renderCell={renderCell}
+      />
     </div>
   );
 };

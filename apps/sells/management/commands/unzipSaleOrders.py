@@ -15,8 +15,8 @@ class Command(BaseCommand):
     def handle(self, *args, **kwargs):
         # Convert base_folder to a Path object
         base_folder = Path('datasets/basefiles/')
-        zip_folder = base_folder / 'sellorders' / 'imp' / 'zipfiles'
-        csv_folder = base_folder / 'sellorders' / 'imp' / 'csv'
+        zip_folder = base_folder / 'sellorders' / 'servi' / 'zipfiles'
+        csv_folder = base_folder / 'sellorders' / 'servi' / 'csv'
 
         if not zip_folder.is_dir():
             self.stderr.write(self.style.ERROR(f"Zip folder '{zip_folder}' does not exist or is not a directory."))

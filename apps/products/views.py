@@ -1,13 +1,17 @@
-from datetime import date, datetime
+from datetime import date, datetime, timedelta
+from decimal import Decimal
+from django.forms import DecimalField
 from django.http import JsonResponse
 from rest_framework.views import APIView
 from rest_framework.response import Response
 from rest_framework import status
 from apps.coremodels.models import Produtos, ItemVenda, Clientes, Vendas
 from django.db.models import Count, Sum, F, Q, Prefetch
+from django.db.models.functions import Cast
 from .serializers import ProdutoSerializer
 from time import time
 import logging
+from django.db.models.functions import Coalesce
 
 # Set up logging configuration
 logger = logging.getLogger(__name__)
@@ -107,67 +111,127 @@ class ProductDetailView(APIView):
             print(f"Error updating produto {sku}: {str(e)}")
             return Response({'error': 'Internal server error', 'details': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
+from django.db.models import F, Sum, Q, DecimalField, Value
+from django.db.models.functions import Coalesce
+from decimal import Decimal
+from datetime import datetime, date, timedelta
+from django.http import JsonResponse
+
 def homePageData(request):
-    # Default start date and today's date
-    default_start_date = date(2024, 1, 1)
-    default_end_date = date.today()
-
-    # Parse date filters from request query parameters
-    start_date_str = request.GET.get('startDate', default_start_date.strftime('%d-%m-%Y'))
-    end_date_str = request.GET.get('endDate', default_end_date.strftime('%d-%m-%Y'))
-
-    # Ensure dates are valid and convert to datetime.date
+    
     try:
-        start_date = datetime.strptime(start_date_str, '%d-%m-%Y').date()
-        end_date = datetime.strptime(end_date_str, '%d-%m-%Y').date()
-    except ValueError:
-        return JsonResponse({"error": "Invalid date format. Use DD-MM-YYYY."}, status=400)
+        # Default start and end dates
+        default_start_date = date(2024, 1, 1)
+        default_end_date = date.today()
 
-    # Valid (non-canceled) sales
-    valid_sales = Vendas.objects.filter(
-        ~Q(situacao__iexact='Cancelado'),
-        data_compra__range=(start_date, end_date)
-    )
+        # Parse date filters from request query parameters
+        start_date_str = request.GET.get('startDate', default_start_date.strftime('%d-%m-%Y'))
+        end_date_str = request.GET.get('endDate', default_end_date.strftime('%d-%m-%Y'))
 
-    # Total PDV Sales
-    total_pdv_sales = valid_sales.filter(
-        canal_venda='Pdv'
-    ).aggregate(total=Sum('itens_venda__preco_final', distinct=True))['total'] or 0
+        # Validate date formats
+        try:
+            start_date = datetime.strptime(start_date_str, '%d-%m-%Y').date()
+            end_date = datetime.strptime(end_date_str, '%d-%m-%Y').date()
+        except ValueError as ve:
+            error_msg = f"Invalid date format. Use DD-MM-YYYY. Error: {ve}"
+            print(error_msg)
+            return JsonResponse({"error": error_msg}, status=400)
 
-    # Total Ecommerce Sales
-    total_ecommerce_sales = valid_sales.exclude(
-        canal_venda='Pdv'
-    ).aggregate(total=Sum('itens_venda__preco_final', distinct=True))['total'] or 0
-
-    # Total Canceled Sales
-    total_canceled_sales = Vendas.objects.filter(
-        situacao__iexact='Cancelado',
-        data_compra__range=(start_date, end_date)
-    ).aggregate(total=Sum('itens_venda__preco_final', distinct=True))['total'] or 0
-
-    # Channel Data
-    channel_data = (
-        valid_sales
-        .values('canal_venda')
-        .annotate(
-            venda_count=Count('id'),
-            item_count=Sum('itens_venda__quantidade_produto'),  # Changed aggregation to sum 'quantidade_produto'
-            total_sales=Sum('itens_venda__preco_final', distinct=True)
+        # Filter valid (non-canceled) sales
+        valid_sales = Vendas.objects.filter(
+            ~Q(situacao__iexact='Cancelado'),
+            data_compra__range=(start_date, end_date)
         )
-        .order_by('canal_venda')
-    )
 
-    # Prepare response
-    response_data = {
-        "totalPdvSales": total_pdv_sales,
-        "totalEcommerceSales": total_ecommerce_sales,
-        "totalCanceledSales": total_canceled_sales,
-        "startDate": start_date.strftime('%Y-%m-%d'),
-        "endDate": end_date.strftime('%Y-%m-%d'),
-        "channelData": list(channel_data),
-    }
+        # Total PDV Sales
+        total_pdv_sales = (
+            valid_sales
+            .filter(canal_venda='Pdv')
+            .annotate(
+                venda_total=Coalesce(Sum(F('itens_venda__valor_total')), Decimal('0.00'))
+            )
+            .aggregate(total=Sum('venda_total'))['total']
+        )
 
-    return JsonResponse(response_data, safe=False)
+        # Total Ecommerce Sales
+        total_ecommerce_sales = (
+            valid_sales
+            .exclude(canal_venda='Pdv')
+            .annotate(
+                venda_total=Coalesce(Sum(F('itens_venda__valor_total')), Decimal('0.00'))
+            )
+            .aggregate(total=Sum('venda_total'))['total']
+        )
+
+        # Total Canceled Sales
+        total_canceled_sales = (
+            Vendas.objects
+            .filter(situacao__iexact='Cancelado', data_compra__range=(start_date, end_date))
+            .annotate(
+                venda_total=Coalesce(Sum(F('itens_venda__valor_total')), Decimal('0.00'))
+            )
+            .aggregate(total=Sum('venda_total'))['total']
+        )
+
+        # Channel Data
+        channel_data = (
+            valid_sales
+            .annotate(
+                venda_total=Coalesce(Sum(F('itens_venda__valor_total'), output_field=DecimalField(max_digits=10, decimal_places=2)), Decimal('0.00'))
+            )
+            .values('canal_venda', 'venda_total')
+            .annotate(
+                venda_count=Count('id'),
+                item_count=Cast(
+                    Coalesce(Sum(F('itens_venda__quantidade_produto'), output_field=DecimalField(max_digits=10, decimal_places=2)), Decimal('0.00')),
+                    output_field=DecimalField(max_digits=10, decimal_places=2))
+            )
+            .order_by('canal_venda')
+        )
+
+        # Define time periods
+        today = date.today()
+        one_week_ago = today - timedelta(days=7)
+        one_month_ago = today - timedelta(days=30)
+
+        # Helper to aggregate sales data
+        def aggregate_sales(queryset):
+            return list(
+                queryset.annotate(
+                    value=Coalesce(F('itens_venda__valor_total'), Decimal('0.00')),
+                    quantity=Coalesce(Sum(F('itens_venda__quantidade_produto'), output_field=DecimalField()), Decimal('0.00'))
+                ).values('id', 'data_compra', 'value', 'quantity')
+            )
+
+        # Today's Sales
+        today_sales = aggregate_sales(valid_sales.filter(data_compra=today))
+
+        # Last Week's Sales
+        last_week_sales = aggregate_sales(valid_sales.filter(data_compra__range=(one_week_ago, today)))
+
+        # Last Month's Sales
+        last_month_sales = aggregate_sales(valid_sales.filter(data_compra__range=(one_month_ago, today)))
+
+        # Prepare response
+        response_data = {
+            "totalPdvSales": total_pdv_sales,
+            "totalEcommerceSales": total_ecommerce_sales,
+            "totalCanceledSales": total_canceled_sales,
+            "startDate": start_date.strftime('%Y-%m-%d'),
+            "endDate": end_date.strftime('%Y-%m-%d'),
+            "channelData": list(channel_data),
+            "todaySales": today_sales,
+            "lastWeekSales": last_week_sales,
+            "lastMonthSales": last_month_sales,
+        }
+
+        print(f"Returning response data: {response_data}")
+        return JsonResponse(response_data, safe=False)
+
+    except Exception as e:
+        error_msg = f"Unexpected error: {e}"
+        print(error_msg)
+        return JsonResponse({"error": error_msg}, status=500)
 
 class ProductInfoView(APIView):
     def get(self, request):

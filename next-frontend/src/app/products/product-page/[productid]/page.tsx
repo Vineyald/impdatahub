@@ -60,9 +60,6 @@ export default function ProductProfilePage() {
         try {
           const response = await axios.get(`${API_URL}/products/${productId}`);
           const productData: Produto = response.data;
-          
-          console.log("Product data:", productData);
-          // Save to localStorage
           localStorage.setItem("productData", JSON.stringify(productData));
           setProductData(productData);
         } catch (error) {
@@ -91,13 +88,15 @@ export default function ProductProfilePage() {
       });
     }
   };
-  
+
   const handleSubmit = async (e: FormEvent<HTMLFormElement>) => {
     e.preventDefault();
     if (productData) {
       try {
-        const response = await axios.put(`${API_URL}/products/${productData.produto.sku}/`, productData);
-        console.log("Product updated:", response.data);
+        const response = await axios.put(
+          `${API_URL}/products/${productData.produto.sku}/`,
+          productData
+        );
         localStorage.setItem("productData", JSON.stringify(response.data));
         setIsEditing(false);
       } catch (error) {
@@ -133,12 +132,12 @@ export default function ProductProfilePage() {
   };
 
   return (
-    <div className="productProfile">
+    <div className="">
       <div className="text-center p-5">
         <Spacer y={10} />
         <div className="container mx-auto md:max-w-5xl">
           <div className="items-center text-center">
-            <p className="text-5xl font-bold capitalize">
+            <p className="text-white text-5xl font-bold capitalize">
               {productData?.produto.descricao || "Produto"}
             </p>
           </div>
@@ -146,7 +145,7 @@ export default function ProductProfilePage() {
       </div>
       <div className="container md:max-w-5xl 2xl:max-w-screen-2xl mx-auto">
         <Spacer y={5} />
-        <Card className="p-6 shadow-lg md">
+        <Card className="p-6 shadow-lg md bg-white">
           {isEditing ? (
             <CardBody>
               <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-4">
@@ -215,7 +214,12 @@ export default function ProductProfilePage() {
                   fullWidth
                   className="col-span-2"
                 />
-                <Button className="col-span-2" type="submit" color="primary" fullWidth>
+                <Button
+                  className="col-span-2"
+                  type="submit"
+                  color="primary"
+                  fullWidth
+                >
                   Salvar
                 </Button>
               </form>
@@ -225,11 +229,15 @@ export default function ProductProfilePage() {
               <div className="text-left space-y-8">
                 {Object.entries(categorizedData).map(([category, fields]) => (
                   <div key={category} className="mb-6">
-                    <h2 className="text-xl font-bold capitalize">{category}</h2>
+                    <h2 className="text-xl font-bold capitalize text-black">
+                      {category}
+                    </h2>
                     <div className="grid grid-cols-2 md:grid-cols-3 gap-4 mt-4">
                       {Object.entries(fields).map(([key, value]) => (
-                        <h1 className="text-lg" key={key}>
-                          <span className="font-semibold">{key}:</span>{" "}
+                        <h1 className="text-lg text-gray-700" key={key}>
+                          <span className="font-semibold text-gray-900">
+                            {key}:
+                          </span>{" "}
                           {typeof value === "string" || typeof value === "number"
                             ? value
                             : "N/A"}
@@ -257,11 +265,13 @@ export default function ProductProfilePage() {
           <Spacer y={10} />
           <div className="container mx-auto">
             <div className="items-center text-center">
-              <p className="text-3xl font-semibold">Vendas deste produto por mês</p>
+              <p className="text-black text-3xl font-semibold">
+                Vendas deste produto por mês
+              </p>
             </div>
           </div>
           <Spacer y={5} />
-          <ProductSalesChart/>
+          <ProductSalesChart />
         </div>
       </div>
       <div>
@@ -270,11 +280,13 @@ export default function ProductProfilePage() {
           <Spacer y={10} />
           <div className="container mx-auto">
             <div className="items-center text-center">
-              <p className="text-3xl font-semibold">Tabela de vendas deste produto</p>
+              <p className="text-black text-3xl font-semibold">
+                Tabela de vendas deste produto
+              </p>
             </div>
           </div>
           <Spacer y={5} />
-          <ProductSalesTable/>
+          <ProductSalesTable />
         </div>
       </div>
     </div>

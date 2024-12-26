@@ -84,24 +84,24 @@ export default function MostSoldProducts() {
     <div>
       <Spacer y={10} />
       <div className="container mx-auto text-center">
-        <h1 className="text-4xl font-bold">Produtos Mais Vendidos</h1>
+        <h1 className="text-white text-4xl font-bold">Produtos Mais Vendidos</h1>
       </div>
       <Spacer y={5} />
       <div className="grid gap-6 md:grid-cols-6 lg:grid-cols-6 xl:grid-cols-9 md:max-w-5xl xl:max-w-screen-2xl mx-auto">
-        <Card className="p-4 col-span-4 md:col-span-6 xl:col-span-9">
-          <h2 className="text-xl font-semibold mb-6">Separados por valor e quantidade</h2>
+        <Card className="card-style p-4 col-span-4 md:col-span-6 xl:col-span-9">
+          <h2 className="text-white text-xl font-semibold mb-6">Separados por valor e quantidade</h2>
           <LineChart />
         </Card>
         <Card className="p-4 col-span-4 md:col-span-6 xl:col-span-3">
-          <h2 className="text-xl font-semibold">Stacked Bar Chart</h2>
+          <h2 className="text-white text-xl font-semibold">Stacked Bar Chart</h2>
           <StackedBarChart />
         </Card>
         <Card className="p-4 col-span-4 md:col-span-3 xl:col-span-3">
-          <h2 className="text-xl font-semibold">Pie/Donut Chart</h2>
+          <h2 className="text-white text-xl font-semibold">Pie/Donut Chart</h2>
           <PieChart />
         </Card>
         <Card className="p-4 col-span-4 md:col-span-3 xl:col-span-3">
-          <h2 className="text-xl font-semibold">Line Chart</h2>
+          <h2 className="text-white text-xl font-semibold">Line Chart</h2>
           <VerticalBarChart />
         </Card>
       </div>

@@ -4,6 +4,7 @@ from django.shortcuts import get_object_or_404
 from apps.coremodels.models import Clientes, ItemVenda
 from rest_framework.response import Response
 from rest_framework.decorators import api_view
+from rest_framework.views import APIView
 from .serializers import ClientSerializer, PurchaseSerializer
 from django.core.cache import cache  # Para caching
 from django.db.models import Count, Q, Max, Value, Prefetch, Sum, DecimalField, Subquery, OuterRef
@@ -62,118 +63,101 @@ def client_profile_api(request, client_id):
             'error': str(e),
         }, status=500)
     
-@api_view(['GET'])
-def all_inactive_clients_with_pdv_sales(request):
+class InactiveClientsWithPdvSales(APIView):
     """
-    Retrieve all active clients with PDV sales.
+    Retrieve all inactive clients with PDV sales.
 
     Checks cache for existing data; if not present, fetches from database,
     filters, structures, and caches the results before returning them.
-
-    Args:
-        request: The HTTP request object.
-
-    Returns:
-        Response: JSON response with active clients and their PDV sales data.
     """
-    try:
-        # Check if data is already cached
-        cached_data = cache.get("clientes_ativos_com_vendas_pdv")
-        if cached_data:
-            return Response(cached_data, status=200)
+    def get(self, request):
+        try:
+            # Check if data is already cached
+            start_time = datetime.now()
+            print(f"{start_time} - Checking cache for inactive clients with PDV sales...")
+            cached_data = cache.get("clientes_inativos_com_vendas_pdv")
+            if cached_data:
+                print(f"{datetime.now()} - Cache hit. Returning cached data.")
+                return Response(cached_data, status=200)
 
-        # Set today's date for filtering
-        hoje = now().date()
-        data_padrao = hoje
+            # Set today's date for filtering
+            today = now().date()
 
-        # Fetch clients from pdv and annotate with last purchase date, excluding canceled sales
-        clientes_filtrados = Clientes.objects.annotate(
-            ultima_compra=Coalesce(
-                Max(
-                    "compras_cliente__venda__data_compra",
-                    filter=Q(compras_cliente__venda__canal_venda="Pdv") & ~Q(compras_cliente__venda__situacao="Cancelado")
+            # Fetch clients with last purchase date and prefetch related purchases
+            print(f"{datetime.now()} - Fetching clients with last purchase date and prefetching related purchases...")
+            clientes_filtrados = Clientes.objects.annotate(
+                ultima_compra=Coalesce(
+                    Max(
+                        "compras_cliente__venda__data_compra",
+                        filter=Q(compras_cliente__venda__canal_venda="Pdv") & ~Q(compras_cliente__venda__situacao="Cancelado")
+                    ),
+                    Value(None)
                 ),
-                Value(None)  # Default value will be None for easier filtering
-            ),
-            rota_cidade=Coalesce(
-                "rota__nome_rota",
-                Value(None)
-            )
-        ).exclude(
-            nome__iexact="Consumidor Final"
-        ).filter(
-            ultima_compra__lt=data_padrao - timedelta(days=30)  # Only clients with no purchase in the last 30 days
-        ).prefetch_related(
-            Prefetch(
-                "compras_cliente",
-                queryset=ItemVenda.objects.select_related("venda", "produto").only(
-                    "cliente_id", "produto__descricao", "produto__preco",
-                    "venda__numero", "venda__data_compra",
-                    "quantidade_produto", "valor_total", "valor_desconto", "frete", "preco_final", "venda__situacao"
-                ).filter(
-                    Q(venda__canal_venda="Pdv") & ~Q(venda__situacao="Cancelado"),
-                ),
-                to_attr="compras"
-            )
-        )
+                rota_cidade=Coalesce("rota__nome_rota", Value(None))
+            ).exclude(
+                nome__iexact="Consumidor Final"
+            ).filter(
+                ultima_compra__lt=today - timedelta(days=30)
+            ).prefetch_related(
+                Prefetch(
+                    "compras_cliente",
+                    queryset=ItemVenda.objects.filter(
+                        Q(venda__canal_venda="Pdv") & ~Q(venda__situacao="Cancelado")
+                    ).only(
+                        "cliente_id", "produto__descricao", "produto__preco",
+                        "venda__numero", "venda__data_compra",
+                        "quantidade_produto", "valor_total", "valor_desconto", "frete", "preco_final", "venda__situacao"
+                    ),
+                    to_attr="compras"
+                )
+            ).filter(compras_cliente__isnull=False)
 
-        # Filter out clients without purchases
-        clientes_filtrados = [cliente for cliente in clientes_filtrados if len(cliente.compras) > 0]
-
-        # Structure data for clients and their purchases
-        clientes_ativos = {}
-        # Structure data for clients and their purchases
-        clientes_ativos = {}
-        for cliente in clientes_filtrados:
-            # Serialize client data and their purchases
-            clientes_ativos[cliente.nome] = {
-                "info": {
-                    "id": cliente.id,
-                    "nome": cliente.nome,
-                    "fantasia": cliente.fantasia,
-                    "tipo_pessoa": cliente.tipo_pessoa,
-                    "cpf_cnpj": cliente.cpf_cnpj,
-                    "email": cliente.email,
-                    "celular": cliente.celular,
-                    "fone": cliente.fone,
-                    "cep": cliente.cep,
-                    "rota": cliente.rota,
-                    "endereco": cliente.endereco,
-                    "numero": cliente.numero,
-                    "complemento": cliente.complemento,
-                    "bairro": cliente.bairro,
-                    "cidade": cliente.cidade,
-                    "estado": cliente.estado,
-                    "situacao": cliente.situacao,
-                    "vendedor": cliente.vendedor,
-                    "contribuinte": cliente.contribuinte,
-                    "codigo_regime_tributario": cliente.codigo_regime_tributario,
-                    "limite_credito": cliente.limite_credito,
-                    "ultima_compra": cliente.ultima_compra
-                },
-                "purchases": [
-                    {
-                        "id": compra.venda.id,
-                        "data_compra": compra.venda.data_compra,
-                        "produto": compra.produto.sku,
-                        "quantidade_produto": compra.quantidade_produto,
-                        "valor_total": compra.valor_total,
-                        "valor_desconto": compra.valor_desconto,
-                        "frete": compra.frete,
-                        "preco_final": compra.preco_final,
-                        "situacao": compra.venda.situacao
-                    }
-                    for compra in cliente.compras
-                ]
+            # Structure data for clients and their purchases
+            print(f"{datetime.now()} - Structuring data for clients and their purchases...")
+            clientes_ativos = {
+                cliente.nome: {
+                    "info": {
+                        "id": cliente.id,
+                        "nome": cliente.nome,
+                        "fantasia": cliente.fantasia,
+                        "tipo_pessoa": cliente.tipo_pessoa,
+                        "cpf_cnpj": cliente.cpf_cnpj,
+                        "cep": cliente.cep,
+                        "rota": cliente.rota,
+                        "numero": cliente.numero,
+                        "cidade": cliente.cidade,
+                        "situacao": cliente.situacao,
+                        "vendedor": cliente.vendedor,
+                        "ultima_compra": cliente.ultima_compra
+                    },
+                    "purchases": [
+                        {
+                            "id": compra.venda.id,
+                            "data_compra": compra.venda.data_compra,
+                            "produto": compra.produto.sku,
+                            "quantidade_produto": compra.quantidade_produto,
+                            "valor_total": compra.valor_total,
+                            "valor_desconto": compra.valor_desconto,
+                            "frete": compra.frete,
+                            "preco_final": compra.preco_final,
+                            "situacao": compra.venda.situacao
+                        }
+                        for compra in cliente.compras
+                    ]
+                }
+                for cliente in clientes_filtrados
             }
 
-        # Cache the results
-        cache.set("clientes_ativos_com_vendas_pdv", clientes_ativos, timeout=3600)
-        return Response(clientes_ativos, status=200)
+            # Cache the results
+            print(f"{datetime.now()} - Caching results...")
+            cache.set("clientes_inativos_com_vendas_pdv", clientes_ativos, timeout=3600)
+            print(f"{datetime.now()} - Returning response...")
+            return Response(clientes_ativos, status=200)
 
-    except Exception as e:
-        # Return error response in case of an unexpected error
-        return Response({"error": "Ocorreu um erro inesperado.", "details": str(e)}, status=500)
+        except Exception as e:
+            # Return error response in case of an unexpected error
+            print(f"{datetime.now()} - Unexpected error: {str(e)}")
+            return Response({"error": "Ocorreu um erro inesperado.", "details": str(e)}, status=500)
 
 # Load the CEP range table
 file_path = 'datasets/Lista_de_CEPs.xlsx'
@@ -239,12 +223,6 @@ def get_cities_and_coordinates_from_ceps(request):
 
 @api_view(['GET'])
 def all_clients_with_pdv_sales(request):
-    """
-    Retrieve all clients, including those without PDV sales, excluding inactive ones.
-    
-    Checks cache first; if not found, queries the database, structures data,
-    caches it, and returns the result.
-    """
     try:
         # Check cache
         cached_data = cache.get("all_clients_with_pdv_sales")
@@ -280,49 +258,31 @@ def all_clients_with_pdv_sales(request):
             )
         )
 
-        # Serialize data for clients and their purchases
-        clientes_data = {
-            cliente.nome: {
-                "info": {
-                    "id": cliente.id,
-                    "nome": cliente.nome,
-                    "fantasia": cliente.fantasia,
-                    "tipo_pessoa": cliente.tipo_pessoa,
-                    "cpf_cnpj": cliente.cpf_cnpj,
-                    "email": cliente.email,
-                    "celular": cliente.celular,
-                    "fone": cliente.fone,
-                    "cep": cliente.cep,
-                    "rota": cliente.rota_cidade,
-                    "endereco": cliente.endereco,
-                    "numero": cliente.numero,
-                    "complemento": cliente.complemento,
-                    "bairro": cliente.bairro,
-                    "cidade": cliente.cidade,
-                    "estado": cliente.estado,
-                    "situacao": cliente.situacao,
-                    "vendedor": cliente.vendedor,
-                    "contribuinte": cliente.contribuinte,
-                    "codigo_regime_tributario": cliente.codigo_regime_tributario,
-                    "limite_credito": cliente.limite_credito,
-                    "ultima_compra": cliente.ultima_compra,
-                    "canal": cliente.canal,
-                },
+        # Serialize data for clients and embed purchases inside each client
+        clientes_data = [
+            {
+                "id": cliente.id,
+                "nome": cliente.nome,
+                "tipo_pessoa": cliente.tipo_pessoa,
+                "rota": cliente.rota_cidade,
+                "bairro": cliente.bairro,
+                "cidade": cliente.cidade,
+                "estado": cliente.estado,
+                "situacao": cliente.situacao,
+                "vendedor": cliente.vendedor,
+                "limite_credito": cliente.limite_credito,
+                "ultima_compra": cliente.ultima_compra,
+                "canal": cliente.canal,
                 "purchases": [
                     {
-                        "data_compra": purchase.venda.data_compra,
-                        "produto": purchase.produto.descricao,
-                        "quantidade": purchase.quantidade_produto,
-                        "valor_total": purchase.valor_total,
-                        "valor_desconto": purchase.valor_desconto,
-                        "frete": purchase.frete,
-                        "preco_final": purchase.preco_final,
+                        'id': purchase.venda.id,
+                        'descricao': purchase.produto.descricao,
                     }
                     for purchase in cliente.compras
-                ] if cliente.compras else [],  # Handle clients with no purchases
+                ] if cliente.compras else [],
             }
             for cliente in clientes
-        }
+        ]
 
         # Cache the results
         cache.set("all_clients_with_pdv_sales", clientes_data, timeout=3600)

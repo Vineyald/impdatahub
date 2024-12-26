@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useEffect, useState, ChangeEvent, FormEvent } from "react";
+import React, { useEffect, useState, FormEvent } from "react";
 import { useParams } from "next/navigation";
 import axios from "axios";
 import {
@@ -73,7 +73,7 @@ export default function ClientProfilePage() {
   const [purchases, setPurchases] = useState<PurchasesData[]>([]);
   const [isEditing, setIsEditing] = useState(false);
   const [selectedMonth, setSelectedMonth] = useState<string | null>(null);
-  const [searchTerm, setSearchTerm] = useState<string>("");
+  const [searchTerm,] = useState<string>("");
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -120,10 +120,6 @@ export default function ClientProfilePage() {
     setClient((prevClient) =>
       prevClient ? { ...prevClient, [name]: value } : null
     );
-  };
-
-  const handleSearchChange = (e: ChangeEvent<HTMLInputElement>) => {
-    setSearchTerm(e.target.value);
   };
 
   const handleSubmit = async (e: FormEvent) => {
@@ -195,20 +191,20 @@ export default function ClientProfilePage() {
     );
 
   return (
-    <div className="clientProfile">
+    <div className="">
       <div className="text-center p-5">
         <Spacer y={10} />
         <div className="container mx-auto md:max-w-5xl">
           <div className="items-center text-center">
-            <p className="text-5xl font-bold capitalize">
+            <p className="text-white text-5xl font-bold capitalize">
               Perfil de {client?.nome || "Cliente"}
             </p>
           </div>
         </div>
       </div>
-      <div className="container md:max-w-5xl 2xl:max-w-screen-2xl mx-auto">
+      <div className="md:max-w-[95%] 2xl:max-w-screen-2xl mx-auto">
         <Spacer y={5} />
-        <Card className="p-6 shadow-lg md">
+        <Card className="p-6">
           {isEditing ? (
             <CardBody className="">
               <form onSubmit={handleSubmit} className="grid grid-cols-2 gap-4">
@@ -401,9 +397,9 @@ export default function ClientProfilePage() {
         </Card>
         <div>
           <Spacer y={10} />
-          <div className="container mx-auto">
+          <div className="mx-auto">
             <div className="items-center text-center">
-              <p className="text-3xl font-semibold">Gastos por mês</p>
+              <p className="text-white text-3xl font-semibold">Gastos por mês</p>
             </div>
           </div>
           <Spacer y={5} />
@@ -412,7 +408,7 @@ export default function ClientProfilePage() {
             onMonthSelect={handleMonthSelect}
           />
           {selectedMonth && (
-            <div className="container mx-auto items-center">
+            <div className="mx-auto items-center">
               <Spacer y={5} />
               <Button
                 className="reset-button"
@@ -425,29 +421,19 @@ export default function ClientProfilePage() {
           )}
         </div>
       </div>
-      <div className="purchases-table">
+      <div className="mx-auto w-full max-w-screen-xl px-4 sm:px-6 lg:px-8">
         <Spacer y={10} />
-        <div className="container mx-auto">
-          <div className="items-center text-center">
-            <p className="text-3xl font-semibold">Compras do cliente por item</p>
-          </div>
+        <div className="text-center">
+          <p className="text-white text-3xl font-semibold">
+            Compras do cliente por item
+          </p>
         </div>
         <Spacer y={8} />
-        <Card className="md:max-w-5xl 2xl:max-w-screen-2xl mx-auto mb-6">
-          <CardBody className="flex flex-col items-center">
-            <span>Pesquise um produto: </span>
-            <Spacer y={2} />
-            <Input
-              placeholder="Produto"
-              value={searchTerm}
-              onChange={handleSearchChange}
-              fullWidth
-            />
-          </CardBody>
-        </Card>
-        <Spacer y={5} />
-        <ClientProfileTable purchases={filteredPurchases} />
+        <div className="">
+          <ClientProfileTable purchases={filteredPurchases} />
+        </div>
       </div>
+
     </div>
   );
 }

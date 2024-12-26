@@ -14,7 +14,7 @@ export default function InactiveClients() {
       <Spacer y={10} />
       <div className="container mx-auto">
         <div className="items-center text-center">
-          <p className="text-5xl font-bold">Top 20 clientes que mais compram</p>
+          <p className="text-white text-5xl font-bold">Top 20 clientes que mais compram</p>
         </div>
       </div>
       <Spacer y={5} />

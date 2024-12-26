@@ -4,7 +4,6 @@ from django.core.management.base import BaseCommand
 from django.core.management import call_command
 import time
 
-
 class Command(BaseCommand):
     help = 'Executa comandos Django em sequÃªncia'
 

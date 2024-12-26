@@ -75,7 +75,7 @@ export default function InactiveClients() {
       <div className='px-4'>
         <Spacer y={8} />
         <Card className="max-w-[750px] mx-auto mb-6">
-          <CardBody className='flex flex-col items-center'>
+          <CardBody className='text-white flex flex-col items-center'>
             <span>Pesquise um cliente pelo nome: </span>
             <Spacer y={2} />
             <Skeleton className='rounded-lg'></Skeleton>

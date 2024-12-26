@@ -76,7 +76,6 @@ export default function App() {
     fetchUserData();
   }, []);
   
-
   const handleLogout = () => {
     Cookies.remove("accessToken");
     Cookies.remove("refreshToken");
@@ -86,7 +85,7 @@ export default function App() {
   };
 
   return (
-    <Navbar isBordered onMenuOpenChange={setIsMenuOpen}>
+    <Navbar isBordered onMenuOpenChange={setIsMenuOpen} className="bg-white">
       <NavbarContent>
         <NavbarMenuToggle
           aria-label={isMenuOpen ? "Fechar menu" : "Abrir menu"}
@@ -154,8 +153,8 @@ export default function App() {
                     Bem vindo, {userName}
                   </Button>
                 </DropdownTrigger>
-                <DropdownMenu variant="faded" aria-label="Dropdown menu" disabledKeys={["user_mysells"]}>
-                  <DropdownItem key="user_mysells">Minhas Vendas</DropdownItem>
+                <DropdownMenu variant="faded" aria-label="Dropdown menu">
+                  <DropdownItem key="user_mysells" href={`/userpages/my-sells/${encodeURIComponent(userName)}`}>Minhas Vendas</DropdownItem>
                   <DropdownItem key="routes_list" href="/userpages/routes-list/">Rotas Cadastradas</DropdownItem>
                 </DropdownMenu>
               </Dropdown>

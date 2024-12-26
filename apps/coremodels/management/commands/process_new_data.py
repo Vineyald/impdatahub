@@ -21,9 +21,11 @@ class Command(BaseCommand):
         try:
 
             # Download data from tiny website
-            if model in ["Vendas", "ItemVenda"]:
+            if model in ["Vendas"]:
                 self.stdout.write("Fazendo o download dos dados pelo Tiny")
                 call_command(f'download_data_Vendas', '--link', links_json)
+            elif model == "ItemVenda":
+                    self.stdout.write("Fazendo o download dos dados pelo Tiny")
             else:
                 self.stdout.write("Fazendo o download dos dados pelo Tiny")
                 call_command(f'download_data_{model}')
@@ -57,13 +59,8 @@ class Command(BaseCommand):
 
 def get_link(model):
     link = {}
-    if model == 'ItemVenda':
-        link = {
-            "Servi": "https://erp.tiny.com.br/relatorios_personalizados#/view/19",
-            "Imp": "https://erp.tiny.com.br/relatorios_personalizados#/view/1365"
-        }
-
-    elif model == 'Vendas':
+    
+    if model == 'Vendas':
         link = {
             "Servi": "https://erp.tiny.com.br/relatorios_personalizados#/view/496",
             "Imp": "https://erp.tiny.com.br/relatorios_personalizados#/view/810"

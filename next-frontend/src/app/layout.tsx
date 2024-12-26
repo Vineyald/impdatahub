@@ -48,7 +48,7 @@ export default function RootLayout({
 
   return (
     <html lang="PT-BR">
-      <body>
+      <body className="grain">
         <Providers>
           {!hideNavbar && <Navbar />}
           <div className="container mx-auto pt-2">
