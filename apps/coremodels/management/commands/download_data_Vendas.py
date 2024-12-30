@@ -33,7 +33,6 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-
 class Command(BaseCommand):
     help = 'Automatiza o login no Tiny Olist e baixa os relatórios disponíveis para múltiplas contas.'
 
@@ -113,7 +112,7 @@ class Command(BaseCommand):
 
         # Configure Chrome options
         chrome_options = Options()
-        #chrome_options.add_argument('--headless=new')  # Run Chrome headless
+        chrome_options.add_argument('--headless=new')  # Run Chrome headless
         chrome_options.add_argument('--no-sandbox')
         chrome_options.add_argument('--disable-dev-shm-usage')
         prefs = {

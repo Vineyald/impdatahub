@@ -116,9 +116,9 @@ const RankingClientsTable: React.FC = () => {
             label="Data inicial"
             onChange={(e) => setStartDate(e.target.value)}
             classNames={{
-              base:'mr-2',
+              base: 'text-white',
               label: '!text-white',
-              inputWrapper: 'card-style'
+              inputWrapper: 'card-style mr-2',
             }}
             variant="bordered"
           />
@@ -127,9 +127,9 @@ const RankingClientsTable: React.FC = () => {
             label="Data final"
             onChange={(e) => setEndDate(e.target.value)}
             classNames={{
-              base:'mr-2',
-              label: '!text-white text-bold',
-              inputWrapper: 'card-style'
+              base: 'text-white',
+              label: '!text-white',
+              inputWrapper: 'card-style mr-2',
             }}
             variant="bordered"
           />

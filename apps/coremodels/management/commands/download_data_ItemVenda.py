@@ -12,7 +12,6 @@ from webdriver_manager.chrome import ChromeDriverManager
 from selenium.common.exceptions import (
     TimeoutException,
     NoSuchElementException,
-    ElementNotInteractableException,
     WebDriverException,
 )
 import time
@@ -21,7 +20,6 @@ import logging
 import threading
 from django.conf import settings
 from datetime import datetime
-import json
 
 # Configurar o logger
 logging.basicConfig(
@@ -37,28 +35,7 @@ logger = logging.getLogger(__name__)
 class Command(BaseCommand):
     help = 'Automatiza o login no Tiny Olist e baixa os relatórios disponíveis para múltiplas contas.'
 
-    def add_arguments(self, parser):
-        parser.add_argument(
-            '--links',
-            type=str,
-            required=True,
-            help='Dicionário JSON contendo os links para cada conta no formato {"Servi": "link_servi", "Imp": "link_imp"}'
-        )
-
     def handle(self, *args, **options):
-        links_json = options['links']
-        try:
-            links = json.loads(links_json)
-            if not isinstance(links, dict):
-                raise ValueError
-            if 'Servi' not in links or 'Imp' not in links:
-                raise ValueError("O dicionário de links deve conter as chaves 'Servi' e 'Imp'.")
-        except ValueError:
-            raise CommandError(
-                "O argumento --links deve ser um dicionário JSON válido com as chaves 'Servi' e 'Imp'. Exemplo: "
-                "'{\"Servi\": \"https://link_servi.com\", \"Imp\": \"https://link_imp.com\"}'"
-            )
-
         accounts = [
             {
                 'type': 'Servi',
@@ -78,7 +55,7 @@ class Command(BaseCommand):
 
         for account in accounts:
             account_type = account['type']
-            link = links.get(account_type)
+            link = "https://erp.tiny.com.br/vendas#"
             if not link:
                 self.stderr.write(self.style.ERROR(
                     f"Link não fornecido para a conta do tipo '{account_type}'."
@@ -99,28 +76,45 @@ class Command(BaseCommand):
     def download_reports(self, account: dict, link: str) -> None:
         username = account['username']
         password = account['password']
-        download_dir = account['download_dir']
+        account_type = account['type']
+        
+        # Get the month name and number
+        today = datetime.today()
+        month_number = today.month
+        month_name = today.strftime("%B").capitalize()  # Month name in Portuguese
+        file_name = f"{month_number} - {month_name}.zip"
 
-        # Verify configuration variables
-        if not username or not password:
-            self.stderr.write(self.style.ERROR("TINY_OLIST_USERNAME or TINY_OLIST_PASSWORD not set."))
+        # Determine the download directory based on the account type
+        if account_type == "Servi":
+            base_dir = os.path.join("datasets", "basefiles", "sellorders", "servi", "zipfiles")
+        elif account_type == "Imp":
+            base_dir = os.path.join("datasets", "basefiles", "sellorders", "imp", "zipfiles")
+        else:
+            self.stderr.write(self.style.ERROR(f"Unknown account type: {account_type}"))
             return
 
         # Create download directory if it doesn't exist
-        if not os.path.exists(download_dir):
-            os.makedirs(download_dir)
-            logger.info(f"Download directory created at {download_dir}")
+        if not os.path.exists(base_dir):
+            os.makedirs(base_dir)
+            logger.info(f"Download directory created at {base_dir}")
+
+        download_path = os.path.join(base_dir, file_name)
+
+        # Remove existing file if it exists
+        if os.path.exists(download_path):
+            os.remove(download_path)
+            logger.info(f"Existing file {file_name} removed.")
 
         # Configure Chrome options
         chrome_options = Options()
-        #chrome_options.add_argument('--headless=new')  # Run Chrome headless
+        chrome_options.add_argument('--headless')
         chrome_options.add_argument('--no-sandbox')
         chrome_options.add_argument('--disable-dev-shm-usage')
         prefs = {
-            "download.default_directory": download_dir,
+            "download.default_directory": os.path.abspath(base_dir),  # Use absolute path for reliability
             "download.prompt_for_download": False,
             "download.directory_upgrade": True,
-            "safebrowsing.enabled": True
+            "safebrowsing.enabled": True,
         }
         chrome_options.add_experimental_option("prefs", prefs)
 
@@ -128,10 +122,11 @@ class Command(BaseCommand):
         try:
             service = Service(ChromeDriverManager().install())  # Automatically managed
             driver = webdriver.Chrome(service=service, options=chrome_options)
-            logger.info("WebDriver initialized with webdriver-manager.")
+            logger.info(f"WebDriver initialized with Chrome, downloading to {os.path.abspath(base_dir)}.")
         except WebDriverException as e:
             self.stderr.write(self.style.ERROR(f"Error initializing WebDriver: {e}"))
             return
+
 
         wait = WebDriverWait(driver, 20)  # Maximum wait time
 
@@ -175,13 +170,58 @@ class Command(BaseCommand):
             time.sleep(5)
             driver.get(link)
 
-            # Interact with the page as requested
-            time.sleep(10)
-            element = driver.find_element(By.CSS_SELECTOR, 'a.filter-label.filter-toggle.has-tipsy-top')
-            element.click()
+            # Step 1: Locate and click the "Período" dropdown link
+            periodo_dropdown = wait.until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, "li.filter-active a.filter-label.filter-toggle"))
+            )
+            periodo_dropdown.click()
+
+            # Step 2: Wait for and select the "Do mês" option
+            do_mes_button = wait.until(
+                EC.element_to_be_clickable((By.ID, "opc-per-mes"))
+            )
+            do_mes_button.click()
+
+            # Step 3: Click the "Aplicar" button
+            aplicar_button = wait.until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, "button.btn-primary.filter-apply"))
+            )
+            aplicar_button.click()
+
+            # Export the report
+            mais_acoes_button = WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, "button.btn.btn-menu-acoes.dropdown-toggle"))
+            )
+            mais_acoes_button.click()
+
+            exportar_pedidos_option = WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((By.CSS_SELECTOR, "a.act-exportar"))
+            )
+            exportar_pedidos_option.click()
+
+            # Wait until the label element for CSV is visible and clickable
+            csv_label = WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((By.XPATH, "//label[input[@name='tipoExportacao' and @value='CSV']]"))
+            )
+            # Click the label to select the radio button
+            csv_label.click()
+
+            exportar_vendas_button = WebDriverWait(driver, 10).until(
+                EC.element_to_be_clickable((By.ID, "btnExportarVendasPlanilha"))
+            )
+            exportar_vendas_button.click()
 
             time.sleep(5)
-           
+
+            # Wait for the download to complete
+            self.wait_for_download(base_dir, timeout=120)
+
+            # Rename the downloaded file to the desired format
+            self.rename_downloaded_file(
+                download_dir=base_dir,
+                expected_name=file_name
+            )
+
         except TimeoutException as te:
             logger.error(f"Timeout waiting for an element for {username}: {te}")
             self.stderr.write(self.style.ERROR(f"Timeout waiting for an element for {username}: {te}"))
@@ -227,3 +267,25 @@ class Command(BaseCommand):
             raise Exception("The loading bar did not disappear within the expected time.") from timeout_exception
         except Exception as exception:
             raise Exception("An error occurred while waiting for the loading bar to disappear.") from exception
+
+    def rename_downloaded_file(self, download_dir, expected_name):
+        """
+        Renames the latest downloaded file in the directory to the expected name.
+        Deletes the original file after renaming to avoid duplication.
+        """
+        logger.info(f"Renaming file in {download_dir} to {expected_name}")
+        for filename in os.listdir(download_dir):
+            if filename.endswith(".csv") or filename.endswith(".zip"):  # Adjust based on the downloaded file type
+                old_file_path = os.path.join(download_dir, filename)
+                new_file_path = os.path.join(download_dir, expected_name)
+                
+                # If a file with the new name already exists, delete it
+                if os.path.exists(new_file_path):
+                    os.remove(new_file_path)
+                    logger.info(f"Deleted existing file with the name {expected_name}")
+                
+                # Rename the original file
+                os.rename(old_file_path, new_file_path)
+                logger.info(f"File renamed from {filename} to {expected_name}")
+                break
+

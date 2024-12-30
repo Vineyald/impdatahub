@@ -78,6 +78,7 @@ const LineChart: React.FC<LineChartProps> = ({ numberOfGraphs, graphs, onClick }
       title: graphs[0]?.yaxistitle || "Y-Axis",
       color: "white",
       showgrid: false,
+      separatethousands: true,
     },
     ...(numberOfGraphs > 1 && {
       yaxis2: {
@@ -86,6 +87,7 @@ const LineChart: React.FC<LineChartProps> = ({ numberOfGraphs, graphs, onClick }
         side: "right",
         color: "white",
         showgrid: false,
+        separatethousands: true,
       },
     }),
     paper_bgcolor: "rgba(0,0,0,0)",

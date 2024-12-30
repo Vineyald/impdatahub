@@ -14,14 +14,22 @@ class Command(BaseCommand):
             self.stdout.write("Processando os dados de Clientes")
             call_command(f'process_new_data', 'Clientes')
 
+            time.sleep(10)
+
             self.stdout.write("Processando os dados de Produtos")
             call_command(f'process_new_data', 'Produtos')
+
+            time.sleep(10)
 
             self.stdout.write("Processando os dados de Vendas")
             call_command(f'process_new_data', 'Vendas')
 
+            time.sleep(10)
+
             self.stdout.write("Processando os dados de ItemVenda")
             call_command(f'process_new_data', 'ItemVenda')
+
+            time.sleep(10)
 
             self.stdout.write(self.style.SUCCESS("Todos os comandos foram executados com sucesso!"))
         except Exception as e:

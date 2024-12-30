@@ -4,8 +4,8 @@ import { Card, CardBody, CardHeader, Input, Divider, Spacer, Image } from '@next
 import { useEffect, useState } from 'react';
 import axios from 'axios';
 import dynamic from 'next/dynamic';
-import RoutesSection from './home-components/routes-section';
 import ClientsSection from './home-components/clients-section';
+import RotasListTable from './userpages/routes-list/page';
 
 const LineChart = dynamic(() => import('@/components/charts/line-chart/line-chart-comp'), { ssr: false });
 
@@ -34,7 +34,15 @@ interface ChannelData {
   venda_total: string;
 }
 
+interface SalesRoute {
+  routeName: string;
+  value: number;
+}
+
 interface Metrics {
+  averageSales: number;
+  averageSalesPerMonth: number;
+  averageSalesPerWeek: number;
   totalPdvSales: string;
   totalEcommerceSales: string;
   totalCanceledSales: string;
@@ -44,6 +52,7 @@ interface Metrics {
   todaySales: PeriodSales[];
   lastWeekSales: PeriodSales[];
   lastMonthSales: PeriodSales[];
+  salesPerRoute: SalesRoute[];
 }
 
 const SpaceDivider = () => {
@@ -104,10 +113,25 @@ export default function Home() {
       return acc;
     }, {} as Record<string, number>);
   
-    return Object.entries(aggregated).map(([date, total]) => ({
-      x: new Date(date).toLocaleDateString("pt-BR"),
-      value: total,
-    }));
+    return Object.entries(aggregated)
+      .sort(([dateA], [dateB]) => {
+        const formattedDateA = new Date(dateA).toLocaleDateString("pt-BR", { year: "numeric", month: "2-digit", day: "2-digit" });
+        const formattedDateB = new Date(dateB).toLocaleDateString("pt-BR", { year: "numeric", month: "2-digit", day: "2-digit" });
+      
+        if (formattedDateA < formattedDateB) {
+          return -1;
+        }
+      
+        if (formattedDateA > formattedDateB) {
+          return 1;
+        }
+      
+        return 0;
+      })
+      .map(([date, total]) => ({
+        x: new Date(date).toLocaleDateString("pt-BR", { year: "numeric", month: "2-digit", day: "2-digit" }),
+        value: total,
+      }));
   };
 
   // Graph configurations
@@ -121,7 +145,13 @@ export default function Home() {
     xaxistitle: "Date",
     yaxis: aggregatedData.map((entry) => entry.value),
     yaxistitle,
-    text: aggregatedData.map((entry) => entry.value.toLocaleString('pt-BR', { minimumFractionDigits: 2, maximumFractionDigits: 2 })),
+    text: aggregatedData.map((entry) => 
+      new Intl.NumberFormat("pt-BR", {
+        style: "currency",
+        currency: "BRL",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(entry.value))
   });
 
   const lastWeekSalesValueAggregated = aggregateByDate(metrics.lastWeekSales, "value");
@@ -133,6 +163,24 @@ export default function Home() {
   const lastMonthGraphs = [
     createGraphConfig(lastMonthSalesValueAggregated, "Vendas Mensais (R$)", "Total Value (R$)")
   ];
+
+  const salesPerRouteGraph: GraphConfig = {
+    name: "Vendas por Rota",
+    xaxis: metrics.salesPerRoute.map((entry) => entry.routeName),
+    xaxistitle: "Rota",
+    yaxis: metrics.salesPerRoute.map((entry) => entry.value),
+    yaxistitle: "Valor total (R$)",
+    text: metrics.salesPerRoute.map((entry) =>
+      new Intl.NumberFormat("pt-BR", {
+        style: "currency",
+        currency: "BRL",
+        minimumFractionDigits: 2,
+        maximumFractionDigits: 2,
+      }).format(entry.value)
+    ),
+    type: "bar", // Set the type property to "bar"
+  };
+  
 
   return (
     <div className="grid grid-cols-3 gap-3 mx-auto p-4 xl:max-w-full">
@@ -270,6 +318,44 @@ export default function Home() {
         <div className="text-white text-center">
           <h1 className="text-3xl font-bold">Vendas por periodo</h1>
         </div>
+        <div className='grid grid-cols-3 md:grid-cols-3 xl:grid-cols-3 gap-6 mt-6'>
+          <Card className='card-style'>
+            <CardHeader>
+              <h1 className='text-white'>Média de vendas diarias (7 dias)</h1>
+            </CardHeader>
+            <CardBody>
+              <h3 className='text-white text-2xl md:text-5xl font-bold text-center'>
+                  R$ {metrics.averageSalesPerWeek.toLocaleString('pt-BR', {
+                    minimumFractionDigits: 2,
+                  })}
+              </h3>
+            </CardBody>
+          </Card>
+          <Card className='card-style'>
+            <CardHeader>
+              <h1 className='text-white'>Média de vendas diarias (30 dias)</h1>
+            </CardHeader>
+            <CardBody>
+              <h3 className='text-white text-2xl md:text-5xl font-bold text-center'>
+                R$ {metrics.averageSalesPerMonth.toLocaleString('pt-BR', {
+                  minimumFractionDigits: 2,
+                })}
+              </h3>
+            </CardBody>
+          </Card>
+          <Card className='card-style'>
+            <CardHeader>
+              <h1 className='text-white'>Média de vendas diarias (total)</h1>
+            </CardHeader>
+            <CardBody>
+              <h3 className='text-white text-2xl md:text-5xl font-bold text-center'>
+                R$ {metrics.averageSales.toLocaleString('pt-BR', {
+                  minimumFractionDigits: 2,
+                })}
+              </h3>
+            </CardBody>
+          </Card>
+        </div>
         <Spacer y={8} />
         <div className="grid grid-cols-1 2xl:grid-cols-2 gap-4">
           <Card className="card-style text-white flex flex-col h-full">
@@ -299,8 +385,56 @@ export default function Home() {
 
       <SpaceDivider/>
 
-      <RoutesSection />
-
+      <div className="col-span-3">
+        <div className="text-white text-center">
+          <h1 className="text-3xl font-bold">Resumo das rotas</h1>
+        </div>
+        <div className="grid grid-cols-2 md:grid-cols-3 xl:grid-cols-3 gap-6">
+          <div className="col-span-2 text-white">
+            <RotasListTable />
+          </div>
+          <div className="flex h-full">
+            <Divider orientation="vertical" className="self-stretch bg-gray-500 w-px mr-3" />
+            <div className="flex flex-col gap-4 flex-grow h-full">
+              <Card className="bg-gray-800 text-white p-4 rounded-lg shadow-md flex-grow">
+                <CardHeader>
+                  <h2 className="text-lg font-semibold">Card 1</h2>
+                </CardHeader>
+                <CardBody>
+                  <p>Detalhes do Card 1.</p>
+                </CardBody>
+              </Card>
+              <Card className="bg-gray-800 text-white p-4 rounded-lg shadow-md flex-grow">
+                <CardHeader>
+                  <h2 className="text-lg font-semibold">Card 2</h2>
+                </CardHeader>
+                <CardBody>
+                  <p>Detalhes do Card 2.</p>
+                </CardBody>
+              </Card>
+              <Card className="bg-gray-800 text-white p-4 rounded-lg shadow-md flex-grow">
+                <CardHeader>
+                  <h2 className="text-lg font-semibold">Card 3</h2>
+                </CardHeader>
+                <CardBody>
+                  <p>Detalhes do Card 3.</p>
+                </CardBody>
+              </Card>
+            </div>
+          </div>
+        </div>
+        <div className='col-span-3 grid grid-cols-1 md:grid-cols-1 xl:grid-cols-1 gap-6 mt-6'>
+          <Card className='card-style'>
+            <CardHeader className="justify-center">
+              <Spacer y={4} />
+              <h2 className="text-white text-lg md:text-2xl font-bold">Vendas por rota</h2>
+            </CardHeader>
+            <CardBody>
+              <LineChart graphs={[salesPerRouteGraph]} numberOfGraphs={1} />
+            </CardBody>
+          </Card>
+        </div>
+      </div>
       <SpaceDivider/>
 
     </div>

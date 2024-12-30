@@ -11,12 +11,15 @@ logger = logging.getLogger(__name__)
 
 class Command(BaseCommand):
     help = 'Unzip sales orders and organize into a structured folder hierarchy.'
+    def add_arguments(self, parser):
+        parser.add_argument('workfolder', type=str, help='Name of the work folder')
 
     def handle(self, *args, **kwargs):
         # Convert base_folder to a Path object
         base_folder = Path('datasets/basefiles/')
-        zip_folder = base_folder / 'sellorders' / 'servi' / 'zipfiles'
-        csv_folder = base_folder / 'sellorders' / 'servi' / 'csv'
+        workfolder = kwargs['workfolder']
+        zip_folder = base_folder / 'sellorders' / workfolder / 'zipfiles'
+        csv_folder = base_folder / 'sellorders' / workfolder / 'csv'
 
         if not zip_folder.is_dir():
             self.stderr.write(self.style.ERROR(f"Zip folder '{zip_folder}' does not exist or is not a directory."))

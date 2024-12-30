@@ -5,7 +5,6 @@ from django.core.management import call_command
 import json
 import time
 
-
 class Command(BaseCommand):
     help = 'Executa comandos Django em sequência'
 
@@ -19,35 +18,38 @@ class Command(BaseCommand):
         caminho_csv = f"datasets/csv/{model}.csv"
 
         try:
-
             # Download data from tiny website
             if model in ["Vendas"]:
                 self.stdout.write("Fazendo o download dos dados pelo Tiny")
                 call_command(f'download_data_Vendas', '--link', links_json)
             elif model == "ItemVenda":
-                    self.stdout.write("Fazendo o download dos dados pelo Tiny")
+                self.stdout.write("Fazendo o download dos dados pelo Tiny")
+                call_command(f'download_data_ItemVenda')
+                call_command(f'unzipSaleOrders', 'imp')
+                call_command(f'unzipSaleOrders', 'servi')
+                call_command(f'prepareSalesRegisters')
             else:
                 self.stdout.write("Fazendo o download dos dados pelo Tiny")
                 call_command(f'download_data_{model}')
             
-            # Join the download files in a singular csv
-            call_command('concate_csv', model)
+            if not model == "ItemVenda":
+                # Join the download files in a singular csv
+                call_command('concate_csv', model)
 
             # If its Clients, fix the ids
             if model == "Clientes":
                 if model == "Clientes":
                     call_command(
                         f'Fix_clientes', 
-                        "E:/08 - Imperio DataHub/impdatahub/datasets/csv/Clientes.csv", 
-                        "E:/08 - Imperio DataHub/impdatahub/datasets/csv"
+                        "datasets/csv/Clientes.csv", 
+                        "datasets/csv"
                     )
     
             if model == "ItemVenda":
                 self.stdout.write("Subindo no banco de dados")
                 call_command(
                     f'send_data_to_db',
-                    caminho_csv,
-                    "datasets/csv/Clientes.csv"
+                    caminho_csv
                 )
             else:
                 self.stdout.write("Subindo no banco de dados")

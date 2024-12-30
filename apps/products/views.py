@@ -212,7 +212,31 @@ def homePageData(request):
         # Last Month's Sales
         last_month_sales = aggregate_sales(valid_sales.filter(data_compra__range=(one_month_ago, today)))
 
-        # Prepare response
+        # Calculate average sales
+        total_sales = valid_sales.aggregate(total=Sum(F('itens_venda__valor_total')))['total'] or Decimal('0.00')
+        total_days = (end_date - start_date).days or 1  # Avoid division by zero
+        average_sales = total_sales / total_days
+
+        # Average sales for the last 30 days
+        total_last_month_sales = valid_sales.filter(data_compra__range=(one_month_ago, today)).aggregate(total=Sum(F('itens_venda__valor_total')))['total'] or Decimal('0.00')
+        average_sales_per_month = total_last_month_sales / 30  # Assuming 30 days for monthly average
+
+        # Average sales for the last 7 days
+        total_last_week_sales = valid_sales.filter(data_compra__range=(one_week_ago, today)).aggregate(total=Sum(F('itens_venda__valor_total')))['total'] or Decimal('0.00')
+        average_sales_per_week = total_last_week_sales / 7  # 7 days for weekly average
+
+        # Sales per Route
+        sales_per_route = (
+            valid_sales
+            .filter(itens_venda__cliente__rota__isnull=False)
+            .values('itens_venda__cliente__rota__nome_rota')
+            .annotate(
+                total_sales=Coalesce(Sum(F('itens_venda__valor_total')), Decimal('0.00'))
+            )
+            .order_by('itens_venda__cliente__rota__nome_rota')
+        )
+
+        # Prepare response with detailed sales per route
         response_data = {
             "totalPdvSales": total_pdv_sales,
             "totalEcommerceSales": total_ecommerce_sales,
@@ -223,9 +247,15 @@ def homePageData(request):
             "todaySales": today_sales,
             "lastWeekSales": last_week_sales,
             "lastMonthSales": last_month_sales,
+            "averageSales": round(average_sales, 2),
+            "averageSalesPerMonth": round(average_sales_per_month, 2),
+            "averageSalesPerWeek": round(average_sales_per_week, 2),
+            "salesPerRoute": [
+                {"routeName": entry["itens_venda__cliente__rota__nome_rota"], "value": entry["total_sales"]}
+                for entry in sales_per_route
+            ],
         }
 
-        print(f"Returning response data: {response_data}")
         return JsonResponse(response_data, safe=False)
 
     except Exception as e:
