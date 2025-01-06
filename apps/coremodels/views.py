@@ -17,21 +17,9 @@ from .serializers import (
     UserSerializer
 )
 from .models import (
-    Clientes, 
-    ItemVenda,
     User
 )
-from django.db.models import (
-    Sum, 
-    Prefetch, 
-    Max, 
-    Q
-)
 from django.contrib.auth import authenticate
-from collections import defaultdict
-from django.utils import timezone
-from datetime import timedelta
-from datetime import datetime
 
 ADMIN_PASSWORD = settings.ADMINPASS
 

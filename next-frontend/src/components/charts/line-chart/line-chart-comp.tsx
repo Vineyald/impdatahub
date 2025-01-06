@@ -12,15 +12,17 @@ interface GraphConfig {
   yaxistitle: string;
   text?: string[];
   type?: "scatter" | "bar"; // Support multiple chart types
+  slider?: boolean;
 }
 
 interface LineChartProps {
   numberOfGraphs: number;
   graphs: GraphConfig[];
+  size?: { width: number | string ; height: number | string };
   onClick?: (event: Readonly<PlotMouseEvent>) => void;
 }
 
-const LineChart: React.FC<LineChartProps> = ({ numberOfGraphs, graphs, onClick }) => {
+const LineChart: React.FC<LineChartProps> = ({ numberOfGraphs, graphs, size, onClick }) => {
   const [hoveredX, setHoveredX] = useState<string | null>(null);
   const plotData: Partial<PlotData>[] = graphs.slice(0, numberOfGraphs).flatMap((graph, index) => {
     const baseData: Partial<PlotData> = {
@@ -48,12 +50,13 @@ const LineChart: React.FC<LineChartProps> = ({ numberOfGraphs, graphs, onClick }
       type: "scatter",
       mode: "text+markers",
       text: graph.text,
-      textposition: "top center", // Adjust this to avoid overlap
+      textposition: "bottom center",
       textfont: {
         color: "white",
         size: 12,
         family: "Arial, sans-serif",
-        weight: 700, // Ensures the text is bold
+        weight: 700,
+        
       },
       name: `${graph.name} (Labels)`,
       marker: {
@@ -69,10 +72,21 @@ const LineChart: React.FC<LineChartProps> = ({ numberOfGraphs, graphs, onClick }
   });
 
   const layout: Partial<Layout> = {
+    margin: {
+      l: 100, // Adjust for Y-axis title
+      r: 60,  // Adjust for legend or extra spacing
+      t: 0,  // Top margin
+      b: 100,  // Adjust for X-axis title
+    },
     xaxis: {
       title: graphs[0]?.xaxistitle || "X-Axis",
       color: "white",
       showgrid: false,
+      rangeslider: {
+        visible: graphs[0]?.slider?? false,
+      },
+      autorange: true,
+      range: [graphs[0]?.xaxis[0], graphs[0]?.xaxis[10] || graphs[0]?.xaxis[graphs[0].xaxis.length - 1]], // Initial visible range
     },
     yaxis: {
       title: graphs[0]?.yaxistitle || "Y-Axis",
@@ -80,25 +94,15 @@ const LineChart: React.FC<LineChartProps> = ({ numberOfGraphs, graphs, onClick }
       showgrid: false,
       separatethousands: true,
     },
-    ...(numberOfGraphs > 1 && {
-      yaxis2: {
-        title: graphs[1]?.yaxistitle || "Y-Axis 2",
-        overlaying: "y",
-        side: "right",
-        color: "white",
-        showgrid: false,
-        separatethousands: true,
-      },
-    }),
     paper_bgcolor: "rgba(0,0,0,0)",
     plot_bgcolor: "rgba(0,0,0,0)",
     legend: {
       x: 1,
-      xanchor: 'right',
+      xanchor: "right",
       y: 1.2,
       font: {
-        color: "white", // Make legend text white
-        size: 12,
+        color: "white",
+        size: Math.max(typeof size?.width === 'number' ? size.width * 0.01 : 0, 10)
       },
       bgcolor: "rgba(0,0,0,0)",
     },
@@ -111,7 +115,7 @@ const LineChart: React.FC<LineChartProps> = ({ numberOfGraphs, graphs, onClick }
             y0: 0,
             y1: 1,
             xref: "x",
-            yref: "paper", // This ensures the line spans the entire plot vertically
+            yref: "paper",
             line: {
               color: "rgba(255, 255, 255, 0.5)",
               width: 2,
@@ -120,16 +124,16 @@ const LineChart: React.FC<LineChartProps> = ({ numberOfGraphs, graphs, onClick }
           },
         ]
       : [],
-  };
+  };  
 
   const handleHover = (event: Readonly<PlotMouseEvent>) => {
     if (event.points && event.points[0]) {
-      setHoveredX(event.points[0].x as string); // Update the hovered X value
+      setHoveredX(event.points[0].x as string);
     }
   };
 
   const handleUnhover = () => {
-    setHoveredX(null); // Clear the hovered X value
+    setHoveredX(null);
   };
 
   return (
@@ -149,10 +153,10 @@ const LineChart: React.FC<LineChartProps> = ({ numberOfGraphs, graphs, onClick }
       <Plot
         data={plotData}
         layout={layout}
+        style={{ width: size?.width, height: size?.height }}
         useResizeHandler={true}
-        style={{ width: "100%", height: "500px" }}
-        onHover={handleHover} // Event handler for hover
-        onUnhover={handleUnhover} // Event handler for unhover
+        onHover={handleHover}
+        onUnhover={handleUnhover}
         onClick={onClick}
       />
     </div>

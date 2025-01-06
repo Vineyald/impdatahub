@@ -179,8 +179,30 @@ class Command(BaseCommand):
 
             # Navegar para a página de exportação de contatos
             self.stdout.write("Navegando para a página de exportação de contatos...")
-            driver.get('https://erp.tiny.com.br/exportacao_contatos?campoPesquisa=nenhum&criterio=opc-todos&dataInativoDesde=&idMunicipio=0&descricaoMunicipio=&idVendedor=0&nomeVendedor=&ordenacao=nome&pesquisa=&tipo=opc-todos&uf=&tipoPeriodo=no_filter&dataIni=&dataFim=&mesAno=11%252F2024')
+            driver.get('https://erp.tiny.com.br/contatos#/')
             logger.info("Página de exportação de contatos acessada.")
+
+            # Clique no filtro "por data do cadastro"
+            filtro_element = wait.until(EC.element_to_be_clickable((By.XPATH, "//a[contains(., 'por data do cadastro')]")))
+            filtro_element.click()
+
+            # Aguarde e clique na opção "Mês"
+            mes_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Mês')]")))
+            mes_button.click()
+
+            # Aguarde e clique no botão "Aplicar"
+            aplicar_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(., 'Aplicar')]")))
+            aplicar_button.click()
+
+            time.sleep(10)
+            
+             # Clique no botão "Mais ações"
+            mais_acoes_button = wait.until(EC.element_to_be_clickable((By.XPATH, "//button[contains(@class, 'btn-menu-acoes') and contains(., 'Mais ações')]")))
+            mais_acoes_button.click()
+
+            # Aguarde e clique na opção "exportar contatos de clientes e fornecedores para planilha"
+            exportar_opcao = wait.until(EC.element_to_be_clickable((By.XPATH, "//li/a[contains(., 'exportar clientes e fornecedores para planilha')]")))
+            exportar_opcao.click()
 
             time.sleep(10)
 

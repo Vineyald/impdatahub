@@ -322,6 +322,11 @@ class Command(BaseCommand):
         if new_records:
             print(f'Creating new records of model {model.__name__}')
             print(f'Number of new records: {len(new_records)}')
+
+            # Remove rows where nome is null before creating
+            if model.__name__ == 'Clientes':
+                new_records = [record for record in new_records if record.nome is not None]
+
             try:
                 model.objects.bulk_create(new_records, ignore_conflicts=True)
                 print(f'Finished creating new records of model {model.__name__}')

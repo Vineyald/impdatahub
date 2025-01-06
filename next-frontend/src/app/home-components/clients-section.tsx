@@ -18,7 +18,7 @@ const ClientsSection = () => {
         <div className="flex h-full">
           <Divider orientation="vertical" className="self-stretch bg-gray-500 w-px mr-3" />
           <div className="flex flex-col gap-4 flex-grow h-full">
-            <Card className="bg-gray-800 text-white p-4 rounded-lg shadow-md flex-grow">
+            <Card className="card-style text-white p-4 rounded-lg shadow-md flex-grow">
               <CardHeader>
                 <h2 className="text-lg font-semibold">Card 1</h2>
               </CardHeader>
@@ -26,7 +26,7 @@ const ClientsSection = () => {
                 <p>Detalhes do Card 1.</p>
               </CardBody>
             </Card>
-            <Card className="bg-gray-800 text-white p-4 rounded-lg shadow-md flex-grow">
+            <Card className="card-style text-white p-4 rounded-lg shadow-md flex-grow">
               <CardHeader>
                 <h2 className="text-lg font-semibold">Card 2</h2>
               </CardHeader>
@@ -34,7 +34,7 @@ const ClientsSection = () => {
                 <p>Detalhes do Card 2.</p>
               </CardBody>
             </Card>
-            <Card className="bg-gray-800 text-white p-4 rounded-lg shadow-md flex-grow">
+            <Card className="card-style text-white p-4 rounded-lg shadow-md flex-grow">
               <CardHeader>
                 <h2 className="text-lg font-semibold">Card 3</h2>
               </CardHeader>

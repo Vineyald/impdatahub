@@ -12,6 +12,7 @@ from .serializers import ProdutoSerializer
 from time import time
 import logging
 from django.db.models.functions import Coalesce
+from django.db.models import Value
 
 # Set up logging configuration
 logger = logging.getLogger(__name__)
@@ -111,24 +112,22 @@ class ProductDetailView(APIView):
             print(f"Error updating produto {sku}: {str(e)}")
             return Response({'error': 'Internal server error', 'details': str(e)}, status=status.HTTP_500_INTERNAL_SERVER_ERROR)
 
-from django.db.models import F, Sum, Q, DecimalField, Value
-from django.db.models.functions import Coalesce
+from datetime import date, datetime, timedelta
 from decimal import Decimal
-from datetime import datetime, date, timedelta
+from django.db.models import (
+    Sum, Q, F, Value, Count, DecimalField, ExpressionWrapper
+)
+from django.db.models.functions import Coalesce
 from django.http import JsonResponse
 
 def homePageData(request):
-    
     try:
-        # Default start and end dates
-        default_start_date = date(2024, 1, 1)
+        default_start_date = date.today().replace(day=1)
         default_end_date = date.today()
 
-        # Parse date filters from request query parameters
         start_date_str = request.GET.get('startDate', default_start_date.strftime('%d-%m-%Y'))
         end_date_str = request.GET.get('endDate', default_end_date.strftime('%d-%m-%Y'))
 
-        # Validate date formats
         try:
             start_date = datetime.strptime(start_date_str, '%d-%m-%Y').date()
             end_date = datetime.strptime(end_date_str, '%d-%m-%Y').date()
@@ -137,98 +136,70 @@ def homePageData(request):
             print(error_msg)
             return JsonResponse({"error": error_msg}, status=400)
 
-        # Filter valid (non-canceled) sales
         valid_sales = Vendas.objects.filter(
             ~Q(situacao__iexact='Cancelado'),
             data_compra__range=(start_date, end_date)
         )
 
-        # Total PDV Sales
         total_pdv_sales = (
-            valid_sales
-            .filter(canal_venda='Pdv')
-            .annotate(
-                venda_total=Coalesce(Sum(F('itens_venda__valor_total')), Decimal('0.00'))
-            )
+            valid_sales.filter(canal_venda='Pdv')
+            .annotate(venda_total=Coalesce(Sum(F('itens_venda__valor_total')), Decimal('0.00')))
             .aggregate(total=Sum('venda_total'))['total']
         )
 
-        # Total Ecommerce Sales
         total_ecommerce_sales = (
-            valid_sales
-            .exclude(canal_venda='Pdv')
-            .annotate(
-                venda_total=Coalesce(Sum(F('itens_venda__valor_total')), Decimal('0.00'))
-            )
+            valid_sales.exclude(canal_venda='Pdv')
+            .annotate(venda_total=Coalesce(Sum(F('itens_venda__valor_total')), Decimal('0.00')))
             .aggregate(total=Sum('venda_total'))['total']
         )
 
-        # Total Canceled Sales
         total_canceled_sales = (
-            Vendas.objects
-            .filter(situacao__iexact='Cancelado', data_compra__range=(start_date, end_date))
-            .annotate(
-                venda_total=Coalesce(Sum(F('itens_venda__valor_total')), Decimal('0.00'))
-            )
+            Vendas.objects.filter(situacao__iexact='Cancelado', data_compra__range=(start_date, end_date))
+            .annotate(venda_total=Coalesce(Sum(F('itens_venda__valor_total')), Decimal('0.00')))
             .aggregate(total=Sum('venda_total'))['total']
         )
 
-        # Channel Data
         channel_data = (
-            valid_sales
-            .annotate(
-                venda_total=Coalesce(Sum(F('itens_venda__valor_total'), output_field=DecimalField(max_digits=10, decimal_places=2)), Decimal('0.00'))
+            valid_sales.annotate(
+                venda_total=Coalesce(Sum(F('itens_venda__valor_total'), output_field=DecimalField()), Decimal('0.00'))
             )
-            .values('canal_venda', 'venda_total')
+            .values('canal_venda')
             .annotate(
                 venda_count=Count('id'),
-                item_count=Cast(
-                    Coalesce(Sum(F('itens_venda__quantidade_produto'), output_field=DecimalField(max_digits=10, decimal_places=2)), Decimal('0.00')),
-                    output_field=DecimalField(max_digits=10, decimal_places=2))
+                item_count=Coalesce(Sum(F('itens_venda__quantidade_produto'), output_field=DecimalField()), Decimal('0.00'))
             )
             .order_by('canal_venda')
         )
 
-        # Define time periods
         today = date.today()
         one_week_ago = today - timedelta(days=7)
         one_month_ago = today - timedelta(days=30)
+        two_months_ago = today - timedelta(days=60)
 
-        # Helper to aggregate sales data
         def aggregate_sales(queryset):
             return list(
                 queryset.annotate(
                     value=Coalesce(F('itens_venda__valor_total'), Decimal('0.00')),
-                    quantity=Coalesce(Sum(F('itens_venda__quantidade_produto'), output_field=DecimalField()), Decimal('0.00'))
-                ).values('id', 'data_compra', 'value', 'quantity')
+                    quantity=Coalesce(Sum(F('itens_venda__quantidade_produto'), output_field=DecimalField()), Decimal('0.00')),
+                    vendedor=Coalesce(F('itens_venda__vendedor__nome'), Value('Sem Vendedor'))
+                ).values('id', 'data_compra', 'value', 'quantity', 'vendedor').order_by('data_compra')
             )
 
-        # Today's Sales
-        today_sales = aggregate_sales(valid_sales.filter(data_compra=today))
-
-        # Last Week's Sales
         last_week_sales = aggregate_sales(valid_sales.filter(data_compra__range=(one_week_ago, today)))
-
-        # Last Month's Sales
         last_month_sales = aggregate_sales(valid_sales.filter(data_compra__range=(one_month_ago, today)))
 
-        # Calculate average sales
-        total_sales = valid_sales.aggregate(total=Sum(F('itens_venda__valor_total')))['total'] or Decimal('0.00')
-        total_days = (end_date - start_date).days or 1  # Avoid division by zero
-        average_sales = total_sales / total_days
+        total_last_month_sales = valid_sales.filter(data_compra__range=(one_month_ago, today)).aggregate(
+            total=Sum(F('itens_venda__valor_total'))
+        )['total'] or Decimal('0.00')
+        average_sales_per_last_month = (total_last_month_sales / 30).quantize(Decimal('0.00'))
 
-        # Average sales for the last 30 days
-        total_last_month_sales = valid_sales.filter(data_compra__range=(one_month_ago, today)).aggregate(total=Sum(F('itens_venda__valor_total')))['total'] or Decimal('0.00')
-        average_sales_per_month = total_last_month_sales / 30  # Assuming 30 days for monthly average
+        total_last_two_months_sales = valid_sales.filter(data_compra__range=(two_months_ago, one_month_ago)).aggregate(
+            total=Sum(F('itens_venda__valor_total'))
+        )['total'] or Decimal('0.00')
+        average_sales_per_last_two_months = (total_last_two_months_sales / 30).quantize(Decimal('0.00'))
 
-        # Average sales for the last 7 days
-        total_last_week_sales = valid_sales.filter(data_compra__range=(one_week_ago, today)).aggregate(total=Sum(F('itens_venda__valor_total')))['total'] or Decimal('0.00')
-        average_sales_per_week = total_last_week_sales / 7  # 7 days for weekly average
-
-        # Sales per Route
         sales_per_route = (
-            valid_sales
-            .filter(itens_venda__cliente__rota__isnull=False)
+            valid_sales.filter(itens_venda__cliente__rota__isnull=False)
             .values('itens_venda__cliente__rota__nome_rota')
             .annotate(
                 total_sales=Coalesce(Sum(F('itens_venda__valor_total')), Decimal('0.00'))
@@ -236,7 +207,25 @@ def homePageData(request):
             .order_by('itens_venda__cliente__rota__nome_rota')
         )
 
-        # Prepare response with detailed sales per route
+        discounted_value_expr = ExpressionWrapper(
+            F('itens_venda__valor_total') * (
+                1 - F('itens_venda__valor_desconto') / 100
+            ),
+            output_field=DecimalField(max_digits=10, decimal_places=2)
+        )
+
+        total_day_sales = valid_sales.filter(data_compra=today).annotate(
+            discounted_value=discounted_value_expr
+        ).aggregate(total=Sum('discounted_value'))['total'] or Decimal('0.00')
+
+        total_week_sales = valid_sales.filter(data_compra__range=(one_week_ago, today)).annotate(
+            discounted_value=discounted_value_expr
+        ).aggregate(total=Sum('discounted_value'))['total'] or Decimal('0.00')
+
+        total_month_sales = valid_sales.filter(data_compra__range=(one_month_ago, today)).annotate(
+            discounted_value=discounted_value_expr
+        ).aggregate(total=Sum('discounted_value'))['total'] or Decimal('0.00')
+
         response_data = {
             "totalPdvSales": total_pdv_sales,
             "totalEcommerceSales": total_ecommerce_sales,
@@ -244,12 +233,13 @@ def homePageData(request):
             "startDate": start_date.strftime('%Y-%m-%d'),
             "endDate": end_date.strftime('%Y-%m-%d'),
             "channelData": list(channel_data),
-            "todaySales": today_sales,
             "lastWeekSales": last_week_sales,
             "lastMonthSales": last_month_sales,
-            "averageSales": round(average_sales, 2),
-            "averageSalesPerMonth": round(average_sales_per_month, 2),
-            "averageSalesPerWeek": round(average_sales_per_week, 2),
+            "totalDaySales": total_day_sales,
+            "totalWeekSales": total_week_sales,
+            "totalMonthSales": total_month_sales,
+            "averageSalesPerLastMonth": average_sales_per_last_month,
+            "averageSalesPerLastTwoMonths": average_sales_per_last_two_months,
             "salesPerRoute": [
                 {"routeName": entry["itens_venda__cliente__rota__nome_rota"], "value": entry["total_sales"]}
                 for entry in sales_per_route

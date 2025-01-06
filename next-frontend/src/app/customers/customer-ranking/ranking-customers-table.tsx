@@ -87,6 +87,18 @@ const RankingClientsTable: React.FC = () => {
             }).format(client.total_gasto)}
           </span>
         );
+      case 'ultima_compra':
+        return (
+          <span>
+            {client.ultima_compra
+              ? new Intl.DateTimeFormat('pt-BR', {
+                  day: '2-digit',
+                  month: '2-digit',
+                  year: 'numeric',
+                }).format(new Date(client.ultima_compra))
+              : 'N/A'}
+          </span>
+        );
       default:
         return <span>{client[columnKey] ?? 'N/A'}</span>;
     }
